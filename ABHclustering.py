@@ -41,6 +41,7 @@ class ABHclustering:
         self.dim = None
 
 
+
     def __repr__(self):
         return str(self.points)
 
@@ -92,25 +93,23 @@ class ABHclustering:
         self.l.log("Finding clusters...")
         n = len(self.points)  #na začetku je vsak primer svoj cluster
         idZ = 0
-        m = n
-        total_dist = 0
+        m = len(self.points)
         while(n != 1):
             dist, pair = self.closest_clusters()
             par = list()
             for el in pair:
                 par.append(el)
-            total_dist+=dist
-            print("par: ", par, ", dist: ", round(dist,2))
+
             tocke = []
             tocke.append(self.clusters[par[0]].points)
             tocke.append(self.clusters[par[1]].points)
 
-            #print("tocke: ", tocke)
+            #print("tocke: ", len(tocke))
             novCluster = Cluster(m+idZ)
             novCluster.update(par[0], par[1], dist, tocke)
             self.clusters.pop(par[0])
             self.clusters.pop(par[1])
-            self.clusters.update({m+idZ: novCluster})
+            self.clusters.update({(m+idZ): novCluster})
 
             if idZ == 0:
                 self.Z = [par[0], par[1], dist, novCluster.n]
@@ -120,13 +119,15 @@ class ABHclustering:
 
             n = len(self.clusters)
             #self.vseSilhuete.update({idZ: self.metodaSilhuet()})
+            print("par: ", par, ", dist: ", round(dist,2))
             idZ+=1
+        print(len(self.Z))
 
         #vrnil naj bi matriko Z, in rezultate metod, ki nam povejo koliko clustrov je
         #print("Optimalno stevilo clustrov po metodi silhuet: ", len(self.points)-1-max(self.vseSilhuete.items(), key=operator.itemgetter(1))[0])
         return self.clusters
     def rebuildClusters(self, clusters, steviloClustrov):
-        self.l.log("Building clusters...")
+        self.l.log("Building clusters... ")
         m = len(self.points)
         for id in range(0, m - steviloClustrov):
             idc1 = self.Z[id][0]
@@ -150,6 +151,7 @@ class ABHclustering:
             clusters[cluster].points = points
             clusters[cluster].centroid = clusters[cluster].calculateCentroid()
             new_keys.append(i)
+
         for key, n_key in zip(clusters.keys(), new_keys):
             clusters[n_key] = clusters.pop(key)
         return clusters
@@ -195,7 +197,10 @@ class ABHclustering:
         Euclidean distance between two points.
         """
         return math.sqrt(sum((a - b) ** 2 for a, b in zip(p1.coords, p2.coords)))
-
+    def getClusterId(self, point):
+        for cluster in self.clusters:
+            if point in self.clusters[cluster].points:
+                return cluster
 
     def check_cannot_link(self, constraints, points1, points2):
         for x in constraints:
@@ -205,6 +210,16 @@ class ABHclustering:
                 if x['cannot-link'][0] in points2 and x['point'][0] in points1:
                     return True
         return False
+    def check_must_link(self, constraints, points):    #vrne par?
+        for x in constraints:
+            if "must-link" in x:
+                if x['point'][0] in points:
+                    if x['must-link'][0] not in points:
+                        return [self.getClusterId(x['point'][0]), self.getClusterId(x['must-link'][0])]
+                if x['must-link'][0] in points:  #tocka ima ML
+                    if x['point'][0] not in points:  #in nista v istem clustru
+                        return [self.getClusterId(x['must-link'][0]), self.getClusterId(x['point'][0])]
+        return -1
 
 
     def ABHclustering(self, constraints,final_n_of_clusters, clusters=None):
@@ -219,14 +234,13 @@ class ABHclustering:
         n = len(self.points)  #na začetku je vsak primer svoj cluster
         idZ = 0
         m = n
-        total_dist = 0
         stop_clustering = False
         while(n != final_n_of_clusters):
             condition = True
             clusters_checked = []
-            while(condition):
-                if(len(clusters_checked) == len(self.clusters)):
-                    print(len(self.clusters))
+            while condition:
+                if len(clusters_checked) == len(self.clusters):
+                    print("Ni mozno nadaljne zruzevanje, ostalo je ",len(self.clusters)," clustrov.")
                     break
                 dist, pair = self.closest_clusters(clusters_checked)
                 if(pair is None):
@@ -235,13 +249,21 @@ class ABHclustering:
                 par = list()
                 for el in pair:
                     par.append(el)
+                #ali ima katerakoli tocka iz obeh clustrov ML, jo zdruzi in ponovno poisci najblizja clustra
+                ML_pair = self.check_must_link(constraints, self.clusters[par[0]].points)
+                if ML_pair == -1:
+                    ML_pair = self.check_must_link(constraints, self.clusters[par[1]].points)
+                if ML_pair != -1:
+                    par[0] = ML_pair[0]
+                    par[1] = ML_pair[1]
                 condition = self.check_cannot_link(constraints, self.clusters[par[0]].points, self.clusters[par[1]].points)
-                if(condition):
+                if condition:
                     clusters_checked.append([par[0], par[1]])
-            if(stop_clustering):
+                dist = self.cluster_distance(par[0], par[1])
+            if stop_clustering:
                 break
-            total_dist+=dist
             print("par: ", par, ", dist: ", round(dist,2), " ", len(self.clusters))
+
             tocke = []
             tocke.append(self.clusters[par[0]].points)
             tocke.append(self.clusters[par[1]].points)
@@ -296,7 +318,6 @@ class ABHclustering:
 
         list.sort(key=lambda x: x[0].silhuette, reverse=False)
         self.candidates = list
-
         #c.printCases(dataOriginal,i)
     def get_pair(self, critical_point_target):
         cluster = None
@@ -381,27 +402,21 @@ class ABHclustering:
         for cond in s:
             conditionSplit = cond.split(" ")
             condition = [0]*3
-
             for c in conditionSplit:
                 if c in atr:
                     attribute = c
                     #atribute index
                     atrIndex = atr.index(attribute)
                     condition[0] = atrIndex
-
                 elif c in self.def_operators():
-
                     operatorString = c
                     #Operator
                     condition[1] = operatorString
-
-
                 else:
                     try:
                         #target value
                         value = float(c)
                         condition[2] = value
-
                     except:
                         pass
             if condition[1] == '>>>' or condition[1] == '<<<':
