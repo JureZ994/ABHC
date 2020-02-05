@@ -8,6 +8,8 @@ from collections import defaultdict
 from scipy.cluster.hierarchy import dendrogram
 from CT import CT
 from operator import itemgetter
+from collections import Counter
+import collections
 from cluster import normalized_mutual_info_score
 from cluster import adjusted_rand_score
 import numpy as np
@@ -39,6 +41,8 @@ class ABHclustering:
         self.vseSilhuete = {}
         self.n_clusters = None
         self.dim = None
+        self.distance_type = None
+        self.distances={}
 
 
 
@@ -52,7 +56,7 @@ class ABHclustering:
         for example in self.clusters[cluster].points:
             if primer != example:
                 dist += self.points_distance(example, primer)
-        return dist / (self.clusters[cluster].n - 1)
+        return dist / (len(self.clusters[cluster].points) - 1)
 
     def getBi(self, point):
         razdalje = []
@@ -68,23 +72,6 @@ class ABHclustering:
             dist = 0
         return dist
 
-    def metodaSilhuet(self):
-        Si = []
-        for cluster in self.clusters:
-            if self.clusters[cluster].n == 1:
-                Si.append(0)
-            else:
-                for point in self.clusters[cluster].points:
-                    ai = self.getAi(cluster, point)
-                    bi = self.getBi(point)
-                    if ai == 0 and bi == 0:
-                        Si.append(0)
-                    else:
-                        Si.append((bi - ai) / max(ai, bi))
-        sum = 0
-        for el in Si:
-            sum += el
-        return sum/len(Si)
     def hierarhicalClustering(self, clusters = None):
         """
         Main hierarhical clustering loop
@@ -192,11 +179,39 @@ class ABHclustering:
         for a, b in x:
             skupna_razdalja += self.points_distance(a, b)
         return skupna_razdalja/len(x)
+
     def points_distance(self, p1, p2):
         """
-        Euclidean distance between two points.
+        Returns Euclidean distance or cosinus similarity between two points.
         """
-        return math.sqrt(sum((a - b) ** 2 for a, b in zip(p1.coords, p2.coords)))
+        kljuc1 = str(p1.reference)
+        kljuc1+=' '
+        kljuc1 += str(p2.reference)
+
+        kljuc2 = str(p2.reference)
+        kljuc2+=' '
+        kljuc2+= str(p1.reference)
+
+        if self.distance_type == "EUCLIDIAN":
+            if kljuc1 in self.distances:
+                return self.distances[kljuc1]
+            elif kljuc2 in self.distances:
+                return self.distances[kljuc2]
+            else:
+                dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(p1.coords, p2.coords)))
+                self.distances.update({kljuc1: dist})
+            return self.distances[kljuc1]
+        elif self.distance_type == "COSINUS":
+            presek = set(p1.coords) & set(p2.coords)
+            skalarni_produkt = 0
+            a = collections.Counter(p1.coords)
+            b = collections.Counter(p2.coords)
+            for coord in presek:
+                skalarni_produkt += a[coord] * b[coord]
+            cos = skalarni_produkt / (math.sqrt(sum(v1 ** 2 for v1 in p1.coords)) *
+                                          math.sqrt(sum(v2 ** 2 for v2 in p2.coords)))
+            return cos
+
     def getClusterId(self, point):
         for cluster in self.clusters:
             if point in self.clusters[cluster].points:
@@ -220,17 +235,32 @@ class ABHclustering:
                     if x['point'][0] not in points:  #in nista v istem clustru
                         return [self.getClusterId(x['must-link'][0]), self.getClusterId(x['point'][0])]
         return -1
-
+    def sort_constraints(self):
+        target=[]
+        no_target=[]
+        for c in self.constraints:
+            if 'target_cluster' in c:
+                target.append(c)
+            else:
+                no_target.append(c)
+        cannot_first = []
+        last=[]
+        for c in target:
+            if 'cannot-link' in c:
+                cannot_first.append(c)
+            else:
+                last.append(c)
+        return cannot_first+last+no_target
 
     def ABHclustering(self, constraints,final_n_of_clusters, clusters=None):
         """
         Main hierarhical clustering loop
         """
         self.l.log("Finding clusters...")
-        print("omejitve: ", constraints)
-        print("clustri: ", clusters)
+        print("omejitve: ", len(constraints), len(self.distances))
+        #print("clustri: ", clusters)
         self.clusters = clusters
-
+        self.Z = np.array([])
         n = len(self.points)  #na začetku je vsak primer svoj cluster
         idZ = 0
         m = n
@@ -249,6 +279,7 @@ class ABHclustering:
                 par = list()
                 for el in pair:
                     par.append(el)
+                self.constraints = self.sort_constraints()
                 #ali ima katerakoli tocka iz obeh clustrov ML, jo zdruzi in ponovno poisci najblizja clustra
                 ML_pair = self.check_must_link(constraints, self.clusters[par[0]].points)
                 if ML_pair == -1:
@@ -262,7 +293,7 @@ class ABHclustering:
                 dist = self.cluster_distance(par[0], par[1])
             if stop_clustering:
                 break
-            print("par: ", par, ", dist: ", round(dist,2), " ", len(self.clusters))
+            #print("par: ", par, ", dist: ", round(dist,2), " ", len(self.clusters))
 
             tocke = []
             tocke.append(self.clusters[par[0]].points)
@@ -474,9 +505,9 @@ class ABHclustering:
             }
     def def_ops(self):
         return {
-        '*': operator.mul,
-        '+': operator.add,
         '/': operator.truediv,
+        '*': operator.mul,
+        '+': operator.add
         }
     def get_operator(self, op):
         return self.def_operators()[op]

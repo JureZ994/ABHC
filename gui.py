@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # __author__ = 'peter'
+import os
 from tkinter import *
 from ABHclustering import ABHclustering
 from cluster import Cluster, Point
@@ -9,7 +10,8 @@ from CT import CT
 
 #RUN_SET = "IRIS"
 RUN_SET = "BONITETE"
-LOG_NAME = "ABHC.log"
+LOG_NAME = "results.log"
+TEST_CONST = [10, 30, 60, 100, 150, 200, 250, 300, 400]
 
 
 class App:
@@ -24,7 +26,8 @@ class App:
         self.step = 0
 
         self.autorun = None
-
+        self.autorun = Button(menu_frame, text="Autorun", command=self.bot2)
+        self.autorun.pack(side=LEFT)
         frame = Frame(bg="red")
         frame.pack(expand=1, fill='both', side=RIGHT)
         self.frame = frame
@@ -76,6 +79,7 @@ class App:
         self.additional_attributes = []
         self.proti = None
         self.pogoj = None
+        self.data_filename = None
 
         if RUN_SET == "IRIS":
             self.init_iris()
@@ -111,12 +115,39 @@ class App:
                                                                     "Run ABHC:")
 
     def set_labels(self):
-
         self.listbox.delete(0, END)
         self.map_point_name_to_point = {}
         for i, c in enumerate(self.abh.condition):
             self.listbox.insert(END, "Example " + str(c['point'][0].reference))
             self.map_point_name_to_point["Example " + str(c['point'][0].reference)] = c['point']
+    def open_cluster_window(self, cluster):
+        if hasattr(self, 'top'):
+            self.top.destroy()
+        top = self.top = Toplevel(self.master)
+
+        self.top.point_frame = None
+        o = cluster.__repr__()
+        f = self.top.list_frame = Frame(self.top)
+        f.pack(expand=1, fill='both', side=LEFT, anchor=NW)
+
+
+        scrollbar = Scrollbar(f)
+        scrollbar.pack( side = RIGHT, fill=Y )
+
+        self.cluster_listbox = Listbox(f, width=30, yscrollcommand = scrollbar.set )
+        self.cluster_listbox.pack(expand=1, fill='both', side=TOP, anchor=W)
+        self.cluster_listbox.bind("<<ListboxSelect>>", lambda e,cluster=cluster:self.display_point_data(e,cluster))
+
+        self.cluster_listbox.delete(0, END)
+        self.cluster_listbox.insert(END, cluster)
+        self.log(cluster.__repr__())
+
+        for p in cluster.points:
+            self.cluster_listbox.insert(END, p)
+            self.log(p.__repr__())
+        scrollbar.config( command = self.cluster_listbox.yview )
+        self.cluster_listbox.select_set(0) #This only sets focus on the first item.
+        self.cluster_listbox.event_generate("<<ListboxSelect>>")
 
     def display_critical_data(self, ok):
         now = self.listbox.curselection()[0]
@@ -176,6 +207,7 @@ class App:
 
         self.clusters = {}
         self.clustersCopy = {}
+        self.updatedClusters = {}
         # Create points from data
         for i, line in enumerate(data):
             points.append(Point([float((line[x])) for x in range(0, len(line[:4]))], cheat=line[4], reference=i))
@@ -185,28 +217,34 @@ class App:
             cluster.primeri.append(i)
             self.clusters.update({i: cluster})
             self.clustersCopy.update({i: cluster})
+            self.updatedClusters.update({i: cluster})
         self.points = points
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
         self.abh.dim = 4
+        self.abh.distance_type = "EUCLIDIAN"
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
+        self.data_filename ="IRIS_"
 
     def init_bonitete(self):
         """
         Finding critical examples from the bonitete dataset
         """
+
         input = open('bonitete_tutor.tab', 'r')
         reader = csv.reader(input)
         atributi = next(reader)
         atributi = [i.split('\t') for i in atributi]
         atributi = atributi[0]
-        self.attributes = [atributi[i] for i in range(2,24)]+[atributi[33]]
+        self.attributes = [atributi[i] for i in range(2,24)]+[atributi[33]] + [atributi[1]] + [atributi[0]]
         points = []
         self.clusters = {}
         self.clustersCopy = {}
+        self.updatedClusters = {}
         data = [d[:] for d in reader]
+
         for i, line in enumerate(data):
             if i > 1:
                 vrstica = line[0].split('\t')
@@ -219,21 +257,59 @@ class App:
                     vektor.append(float(0))
                 elif vrstica[33] == "TRUE":
                     vektor.append(float(1))
-                cheat = vrstica[34]
-                points.append(Point(vektor, cheat=cheat, reference=reference))
+                if vrstica[34] == "A":
+                    cheat = "GOOD"
+                else:
+                    cheat = "BAD"
+                if vrstica[1] == "S":
+                    vektor.append(float(0))
+                elif vrstica[1] == "M":
+                    vektor.append(float(1))
+                elif vrstica[1] == "L":
+                    vektor.append(float(2))
+                vektor.append(float(ord(vrstica[0])))
+                points.append(Point(vektor, cheat=cheat, reference=int(reference)))
                 cluster = Cluster(reference)
-                cluster.points.append(Point(vektor, cheat=cheat, reference=reference))
+                cluster.points.append(Point(vektor, cheat=cheat, reference=int(reference)))
                 cluster.primeri.append(reference)
                 self.clusters.update({reference: cluster})
                 self.clustersCopy.update({reference: cluster})
+                self.updatedClusters.update({reference: cluster})
+                #print(vrstica[atributi.index('lt.ebit.margin.change')] , " = ")
+                #a = float(vrstica[atributi.index('net.sales')]) - float(vrstica[atributi.index('cost.of.goods.and.services')]) - float(vrstica[atributi.index('cost.of.labor')]) - float(vrstica[atributi.index('financial.expenses')])
+                #print(float(vrstica[atributi.index('EBIT')] ) / float(vrstica[atributi.index('net.income')]))
+                #print(vrstica[atributi.index('lt.ebit.margin.change')] ," = ", )
+                #print(vrstica[atributi.index('lt.sales.growth')], " = ", (float(vrstica[atributi.index('lt.assets')]) / float(vrstica[atributi.index('lt.liabilities')])))
+                #print(vrstica[atributi.index('net.debt/EBITDA')], " = ", ((float(vrstica[atributi.index('debt')]) + float(vrstica[atributi.index('cash')])   ) / float(vrstica[atributi.index('EBITDA')])))
+                """
+                print(vrstica[atributi.index('TIE')], " = ")
+                a = float(vrstica[atributi.index('EBIT')])
+                b = float(vrstica[atributi.index('interest')])
+                if a == 0 or b == 0:
+                    print("0")
+                else:
+                    if round(a / b, 2) == float(vrstica[atributi.index('ROA')]):
+                        st1 += 1
+                    else:
+                        print(round(a / b, 2))
 
+                #print(vrstica[atributi.index('ROA')])
+                #print(vrstica[atributi.index('net.sales')])
+                #print(vrstica[atributi.index('total.oper.liabilities')] + vrstica[atributi.index('assets')])
+                #print(vrstica[atributi.index('ROA')], " = ", (
+                        #float(vrstica[atributi.index('net.income')]) / (
+                        #float(vrstica[atributi.index('assets')]) + float(vrstica[atributi.index('cash')]) + float(vrstica[atributi.index('inventories')]) + float(vrstica[atributi.index('lt.assets')]) )))
+                print("-----")
+                """
         self.points = points
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
-        self.abh.dim = 23
+        self.abh.dim = 25
+        self.abh.distance_type = "EUCLIDIAN"
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
+        self.data_filename="BONITETE_"
 
 
     def hierarhicalClustering(self):
@@ -373,6 +449,7 @@ class App:
         self.log("============================================\n")
         self.log("============================================\n")
         self.log("============================================\n")
+        self.log("ITER. NBR: "+str(self.cikel_nbr))
         self.log(self.abh.l.clusters(self.abh))
         f = open('points_Cikel' + str(self.cikel_nbr) + ".txt", 'w')
         for cluster in self.abh.clusters:
@@ -451,6 +528,7 @@ class App:
                                                                     "Run ABHC:")
 
     def argument_steps(self):
+        print("ARGUMENTIRAJ KRITICNI PRIMER")
         if len(self.listbox.curselection()) != 0:
             critical_point = self.map_point_name_to_point[self.listbox.get(self.listbox.curselection())][0]
         else:
@@ -504,6 +582,7 @@ class App:
                 self.helper = None
         if self.step < 3:
             self.step = 3
+
         self.set_labels()
         for i in range(0, len(self.abh.condition)):
             cond = self.abh.condition[i]['arguments']
@@ -637,11 +716,10 @@ class App:
         self.top.destroy()
 
     def pick_critical_popup(self, start=0, end=5):
-        print("DOLZINA: ", len(self.abh.candidates))
         end = end if len(self.abh.candidates) >= end else len(self.abh.candidates)
         text = "Showing top " + str(end) + " critical examples. Choose one to argument\n"
 
-        self.log(text)
+        #self.log(text)
         text += self.abh.l.candidates(self.abh, self.abh.candidates[start:end], start, end)
         self.log(text)
 
@@ -692,40 +770,46 @@ class App:
         # print("counter: ", self.counter)
         print_list = [critical_point, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
         # Ask if data is correct
+        self.m = critical_point
 
         text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
+
 
         top = self.top = Toplevel(self.master)
 
         frame = Frame(self.top)
         frame.pack(fill=X, anchor=W)
 
-        output_field = Text(top, height=30, width=120)
-        output_field.insert(END, text)
-        output_field.pack(fill=BOTH, expand=1)
+        self.test = StringVar()
+        self.test.set(text)
+
+        self.output_field = Label(top, textvariable=self.test, anchor="nw", justify=LEFT, font="Consolas 11")
+        self.output_field.pack(fill=BOTH, expand=1)
 
         b = Button(top, text="OK", command=self.argument_pair_close).pack()
         b2 = Button(top, text="AND", command=self.argument_new).pack()
         b3 = Button(top, text="ADD ATTRIBUTE", command=self.attribute_new).pack()
+        b4 = Button(top, text="DELETE ATTRIBUTE", command=self.delete_att).pack()
 
         str_o = "Example " + str(critical_point[0].reference) + " has "
-
         self.args = [self.create_arg_form(True)]
 
-        label = Label(self.support_frame, text="THEN", font="Helvetica 14 bold italic")
-        label.pack(side=LEFT)
+        self.label1 = Label(self.support_frame, text="THEN", font="Helvetica 14 bold italic")
+        self.label1.pack(side=LEFT)
 
         self.counter_act = StringVar()
         self.choice_string = ['Nothing', 'Cannot-link', 'Must-link']
 
         self.counter_act.set(self.choice_string[0])  # default value
-        w2 = OptionMenu(self.support_frame, self.counter_act, *self.choice_string).pack(side=LEFT)
+        self.op2 = OptionMenu(self.support_frame, self.counter_act, *self.choice_string).pack(side=LEFT)
 
     def argument_new(self):
         self.args.append(self.create_arg_form())
 
     def attribute_new(self):
         self.create_attribute_form()
+    def delete_att(self):
+        self.create_delete_form()
 
     def create_arg_form(self, if_label=False):
         self.support_frame = frame = Frame(self.top)
@@ -738,14 +822,15 @@ class App:
             label = Label(frame, text="IF", font="Helvetica 14 bold italic")
             label.pack(side=LEFT)
         self.atr = StringVar()
-        choice = [i for i in self.abh.attributes]
-        self.atr.set(choice[0])  # default value
-        w1 = OptionMenu(frame, self.atr, *choice).pack(side=LEFT, anchor=W)
+        self.izbira = [i for i in self.abh.attributes]
+        self.atr.set(self.izbira[0])  # default value
+        self.om1 = OptionMenu(frame, self.atr, *self.izbira)
+        self.om1.pack(side=LEFT, anchor=W)
 
         self.op = StringVar()
         choice = [i for i in self.abh.def_operators()]
         self.op.set(choice[0])  # default value
-        w2 = OptionMenu(frame, self.op, *choice).pack(side=LEFT, anchor=W)
+        om2 = OptionMenu(frame, self.op, *choice).pack(side=LEFT, anchor=W)
 
         self.e = Entry(frame)
         self.e.pack(side=LEFT, anchor=W)
@@ -754,7 +839,16 @@ class App:
             state='normal'))
         self.op.trace("w", callback)
 
-        return [self.atr, self.op, self.e]
+        return [self.atr, self.op, self.e, self.om1]
+    def create_delete_form(self):
+        self.support_frame = frame = Frame(self.top)
+        frame.pack(fill=X, side=TOP, anchor=S)
+        self.atribs = StringVar()
+        choice0 = [i for i in self.abh.attributes]
+        self.atribs.set(choice0[0])  # default value
+        w3 = OptionMenu(frame, self.atribs, *choice0).pack(side=LEFT, anchor=E)
+        b4 = Button(frame, text="DELETE ATTRIBUTE", command=self.delete_points).pack(side=RIGHT)
+
 
     def create_attribute_form(self):
         self.support_frame = frame = Frame(self.top)
@@ -784,6 +878,32 @@ class App:
         w5 = OptionMenu(frame, self.atr2, *choice2).pack(side=LEFT, anchor=W)
 
         self.b4 = Button(frame, text="CREATE NEW ATTRIBUTE", command=self.update_points).pack(side=RIGHT)
+    def delete_points(self):
+        idAtributa = self.abh.attributes.index(self.atribs.get())
+        self.abh.attributes.pop(idAtributa)
+
+        for cluster in self.abh.clusters:
+            for point in self.abh.clusters[cluster].points:
+                point.coords.pop(idAtributa)
+                point.n = point.n-1
+            self.abh.clusters[cluster].dim -= 1
+            self.abh.clusters[cluster].centroid = self.abh.clusters[cluster].calculateCentroid()
+        self.abh.distances = {}
+        print_list = [self.m, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
+        # Ask if data is correct
+        text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
+        self.test.set(text)
+        self.izbira = [i for i in self.abh.attributes]
+
+        if len(self.args) > 0:
+            for a in self.args:
+                if len(a) > 3:
+                    a[3].children["menu"].delete(0, "end")
+                    for i in self.izbira:
+                        a[3].children["menu"].add_command(label=i, command=lambda c=i: a[0].set(c))
+                    a[0].set(self.izbira[0])
+
+        self.support_frame.destroy()
 
     def update_points(self):
         new_name = self.f.get()
@@ -802,18 +922,23 @@ class App:
                 point.n = point.n + 1
             self.abh.clusters[cluster].dim = self.abh.clusters[cluster].dim + 1
             self.abh.clusters[cluster].centroid = self.abh.clusters[cluster].calculateCentroid()
+        self.abh.distances = {}
 
-        #TODO: dodaj izbris prejšnega okna..
-        if self.proti is not None and self.pogoj is not None:
-            self.top.destroy()
-            self.counter_argument_popup(self.pogoj,self.proti)
-            self.master.wait_window(self.top)
-            self.pogoj = None
-            self.proti = None
-        else:
-            self.top.destroy()
-            self.get_argument_with_pair_popup()
-            self.top.destroy()
+        print_list = [self.m, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
+        # Ask if data is correct
+        text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
+        self.test.set(text)
+        self.izbira = [i for i in self.abh.attributes]
+
+        if len(self.args) > 0:
+            for a in self.args:
+                if len(a) > 3:
+                    a[3].children["menu"].delete(0, "end")
+                    for i in self.izbira:
+                        a[3].children["menu"].add_command(label=i, command=lambda c=i: a[0].set(c))
+                    a[0].set(self.izbira[0])
+
+        self.support_frame.destroy()
 
     def argument_pair_close(self):
         rule_dic = {}
@@ -863,6 +988,8 @@ class App:
         self.log("Fetching argument for counter example\n")
 
         # Ask if data is correct
+        self.m = condition["point"]
+        self.args = []
 
         text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
         self.log(text)
@@ -872,9 +999,11 @@ class App:
         frame = Frame(self.top)
         frame.pack(fill=X, anchor=W)
 
-        output_field = Text(top, height=30, width=120)
-        output_field.insert(END, text)
-        output_field.pack(fill=BOTH, expand=1)
+        self.test = StringVar()
+        self.test.set(text)
+
+        self.output_field = Label(top, textvariable=self.test, anchor="nw", justify=LEFT, font="Consolas 11")
+        self.output_field.pack(fill=BOTH, expand=1)
 
         b = Button(top, text="OK", command=self.ce_argument_close).pack()
         b2 = Button(top, text="AND", command=self.argument_new).pack()
@@ -887,9 +1016,6 @@ class App:
                 str_o += str(x[2])
         str_o = "Do these two examples fit in the same cluster?"
 
-        if "target_cluster" in condition:
-            str_o += "We want example " + str(critical_point.reference) + "  in cluster: " + str(
-                self.abh.clusters[int(condition["target_cluster"])].name) + " because it has"
         label = Label(frame, text=str_o, font="Helvetica 14 bold italic")
         label.pack(side=LEFT)
 
@@ -968,22 +1094,25 @@ class App:
                         constraint['point'] = c['point']
                     if counter['act'] == 1 and counter['example'] != None:
                         constraint['cannot-link'] = counter['example']
-                        constraints.append((constraint))
                     elif counter['act'] == 2 and counter['example'] != None:
                         constraint['must-link'] = counter['example']
-                        constraints.append((constraint))
-                    f.write(str(constraint) + '\n')  # python will convert \n to os.linesep
-                    self.constraint_count += 1
+                    if constraint not in constraints:
+                        constraints.append(constraint)
+                        f.write(str(constraint) + '\n')  # python will convert \n to os.linesep
+                        self.constraint_count += 1
             f.write("NUMBER OF CONSTRAINTS: " + str(len(constraints)) + '\n')  # python will convert \n to os.linesep
-            f.write("NUMBER OF ALL CONSTRAINTS: " + str(
-                self.constraint_count) + '\n')  # python will convert \n to os.linesep
+            f.write("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')  # python will convert \n to os.linesep
         f.close()  # you can omit in most cases as the destructor will call it
-        # self.log("iter: " + str(self.cikel_nbr) + '\n')
+        self.log("iter: " + str(self.cikel_nbr) + '\n')
         self.log("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')
+
+
         self.abh.constraints = self.abh.constraints + constraints
-        self.log(str(self.abh.constraints) + '\n')
+        #self.log(str(self.abh.constraints) + '\n')
         self.log(self.abh.l.conditions(self.abh))
-        clusters = self.clustersCopy.copy()
+
+        clusters = self.updatedClusters.copy()
+
 
         self.master.config(cursor="wait")
         self.master.update()
@@ -1002,14 +1131,11 @@ class App:
             new_keys.append(i)
         for key, n_key in zip(self.abh.clusters.keys(), new_keys):
             self.abh.clusters[n_key] = self.abh.clusters.pop(key)
-        self.refresh_cluster_data()
+        #self.refresh_cluster_data()
         self.abh.condition_history.append(self.abh.condition)
         self.abh.condition = []
         self.abh.candidates = []
 
-        self.argument_button.destroy()
-        self.counter_example_button.destroy()
-        self.improve_button.destroy()
         self.argument_button = None
         self.counter_example_button = None
         self.improve_button = None
@@ -1045,8 +1171,301 @@ class App:
         self.cluster_output.insert(END, string)
         self.abh.l.log(string)
 
+    def update_display_data(self):
+        """
+        Updates display data
+        :return:
+        """
+        # Show file name
+        o = "===========================\n"
+        o += "===========" + os.path.basename(self.data_filename) + "============\n"
+        o += "===========================\n"
+        details_label = StringVar()
+        details_label.set(o)
+        Label(self.frame, textvariable=details_label, justify=LEFT).pack(side=TOP, anchor=W)
+
+        # show nmi and ari
+        o = ""
+        if self.abh.NMI is not None and self.abh.ARI is not None:
+            o += "NMI: " + str(self.abh.NMI) + "\nARI: " + str(self.abh.ARI) + "\n"
+            self.log(o)
+        details_label = StringVar()
+        details_label.set(o)
+        Label(self.frame, textvariable=details_label, justify=LEFT).pack(side=TOP, anchor=W)
+
+        # show cluster centroids
+        for cluster in self.abh.clusters:
+            o = str(cluster)
+            details_label = StringVar()
+            details_label.set(o)
+            l = Label(self.frame, textvariable=details_label, justify=LEFT, cursor='hand1')
+            l.pack(side=TOP, anchor=W)
+            # On centroid click, open window with points
+            l.bind("<Button-1>", lambda e, cluster=cluster: self.open_cluster_window(cluster))
+
+    def rename_clusters_auto(self, req_names):
+        names = []
+        for cluster in self.abh.clusters:
+            if self.abh.clusters[cluster].name in req_names:
+                break
+            num = 0
+            name = ""
+            print(self.abh.clusters[cluster].purity)
+            for c, n in self.abh.clusters[cluster].purity:
+                if n > num:
+                    num = n
+                    name = c
+            if name not in names:
+                self.abh.clusters[cluster].name = name
+                names.append(name)
+            else:
+                for n in req_names:
+                    if n not in names:
+                        self.abh.clusters[cluster].name = name
+                        names.append(name)
+                    else:
+                        return self.rename_clusters_auto(req_names)
+        for cluster in self.abh.clusters:
+            if not self.abh.clusters[cluster].name in req_names:
+                self.abh.clusters = self.abh.hierarhicalClustering(self.clustersCopy.copy())
+                return self.rename_clusters_auto(req_names)
+    def cluster_name_to_int(self, name):
+        for i,c in enumerate(self.abh.clusters):
+            if self.abh[c].name == name:
+                return i
+    def bot(self):
+        n_clusters = 3
+        for t in TEST_CONST:
+            self.test_nbr = 0
+            while self.test_nbr < 30:
+                self.__init__(root)
+                self.log("===============|st Testa"+str(self.test_nbr)+"|===========pri st omejitev: "+str(t))
+                self.test_nbr +=1
+                self.abh.clusters = self.abh.hierarhicalClustering(self.clusters)
+                self.initialClusters = self.clustersCopy.copy()
+                self.abh.clusters = self.abh.rebuildClusters(self.initialClusters, n_clusters)
+                self.refresh_cluster_data()
+                first_critical = True
+                req_names = ["BAD", "GOOD"]
+
+                while True:
+                    print("CIKEL ST: ", self.cikel_nbr, " |", len(self.abh.clusters))
+                    if self.cikel_nbr >= 300 or self.constraint_count > t:
+                        break
+                    if len(self.abh.clusters) > n_clusters:
+                        break
+                    self.abh.get_candidates()
+                    if len(self.abh.candidates) == 0:
+                        break
+                    if first_critical:
+                        test = False
+                        self.abh.critical_example.append(self.abh.candidates[0])
+                    else:
+                        test = True
+                        for cand in self.abh.candidates:
+                            if self.cluster_name_to_int(cand[0].cheat) != cand[1]:  # ni v pravem clustru
+                                self.abh.critical_example.append(cand)
+                                test = False
+                                break
+                    print("Found critical Example",)
+                    print(test)
+                    print(self.abh.critical_example[-1])
+                    if test or self.abh.NMI >= 1:
+                        #self.refresh_cluster_data()
+                        break
+                    self.counter = self.abh.get_pair(self.abh.critical_example[-1][1])
+                    counter_list = []
+                    print(self.counter[0].cheat, self.counter[0].reference , self.counter[0].silhuette)
+                    print(self.abh.critical_example[-1][0].cheat, self.abh.critical_example[-1][0].reference, self.abh.critical_example[-1][0].silhuette)
+
+                    if self.counter[0].cheat == self.abh.critical_example[-1][0].cheat:  #protiprimer je enak kriticnemu primeru
+                        counter_list.append({'example': self.counter, 'act': 2})
+                    else:
+                        counter_list.append({'example': self.counter, 'act': 1})
+                    arguments = []
+                    """
+                    if self.abh.critical_example[-1][0].cheat == 'Iris-setosa':
+                        arguments.append(['PedalWidth', '<<<', ''])
+
+                    if self.abh.critical_example[-1][0].cheat == 'Iris-virginica':
+                        arguments.append(['PedalWidth', '>>>', ''])
+
+                    if self.abh.critical_example[-1][0].cheat == 'Iris-versicolor':
+                        arguments.append(['PedalLength', '>>>', '']) 
+                    """
+                    if self.abh.critical_example[-1][0].cheat == 'BAD':
+                        arguments.append(['net.income', '<<<', ''])
+    
+                    if self.abh.critical_example[-1][0].cheat == 'GOOD':
+                        arguments.append(['net.income', '>>>', ''])
+
+                    arg_dic = {'point': self.abh.critical_example[-1], 'counter': counter_list,
+                               'current_cluster': self.abh.critical_example[-1][1], 'arguments': arguments}
+                    print(arg_dic)
+                    exit
+                    self.abh.condition.append(arg_dic)
+
+                    # get counters
+                    for condition in self.abh.condition:
+                        self.log(
+                            "Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
+
+                        # open popup with data and ask to argument counter example
+                        counters = self.abh.counter_example(condition)
+                        for counter in counters:
+                            #print(counter[0].cheat)
+                            #print(self.abh.critical_example[-1][0].cheat)
+                            if self.abh.critical_example[-1][0].cheat == counter[0].cheat:
+                                act = 2
+                            else:
+                                act = 1
+                            counter_list = [{'example': counter, 'act': act}]
+                            condition["counter"] = condition["counter"] + counter_list
+                    self.improve_hc()
+                    self.initialClusters = self.clustersCopy.copy()
+                    self.abh.clusters = self.abh.rebuildClusters(self.initialClusters, n_clusters)
+                    self.refresh_cluster_data()
+                # Write report
+                f = open('report1.txt', 'a')
+                o = str(self.test_nbr)+': Cikles: '+str(self.cikel_nbr)+' constraints: '+str((self.constraint_count))+' ARI: '+str(self.abh.ARI)+' NMI: '+str(self.abh.NMI)
+                o=o+" first_critical: "+str(first_critical)+" test: "+str(t)+"\n"
+
+                f.write(o)  # python will convert \n to os.linesep
+                f.close()  # you can omit in most cases as the destructor will call it
+
+    def bot2(self):
+        n_clusters = 2
+        first = True
+        for t in TEST_CONST:
+            self.test_nbr = 0
+            while self.test_nbr < 30:
+                self.__init__(root)
+                self.log("===============|st Testa" + str(self.test_nbr) + "|===========pri st omejitev: " + str(t))
+                self.log("st atributov: " +str(len(self.abh.attributes)))
+                self.test_nbr += 1
+                self.abh.clusters = self.abh.hierarhicalClustering(self.clusters)
+                self.initialClusters = self.clustersCopy.copy()
+                self.abh.clusters = self.abh.rebuildClusters(self.initialClusters, n_clusters)
+                self.abh.attributes.append('equity.ratio')
+                self.abh.attributes.append('current.ratio')
+                self.abh.attributes.append('debt.to.total.assets.ratio')
+                self.abh.attributes.append('net.debt/EBITDA')
+                self.abh.attributes.append('ROA')
+                self.abh.attributes.append('TIE')
+                self.abh.dim = 31
+                self.abh.distances = {}
+                for cluster in self.abh.clusters:
+                    for point in self.abh.clusters[cluster].points:
+                        point.coords.append(round(point.coords[self.abh.attributes.index('equity')] /
+                                                  (point.coords[self.abh.attributes.index('lt.assets')]+point.coords[self.abh.attributes.index('st.assets')]), 2)) #equity ratio
+                        point.coords.append(round(point.coords[self.abh.attributes.index('st.assets')] /
+                                                  point.coords[self.abh.attributes.index('st.liabilities')], 2)) #current ratio
+                        point.coords.append(round(point.coords[self.abh.attributes.index('total.oper.liabilities')] /
+                                                  (point.coords[self.abh.attributes.index('lt.assets')]+point.coords[self.abh.attributes.index('st.assets')]), 2)) #debt to total assets ratio
+                        point.coords.append(round((point.coords[self.abh.attributes.index('debt')] - point.coords[self.abh.attributes.index('cash')])/
+                                                  point.coords[self.abh.attributes.index('EBITDA')], 2)) #net.debt/EBITDA
+                        EBIT = point.coords[self.abh.attributes.index('EBIT')]
+                        assets = point.coords[self.abh.attributes.index('assets')]
+                        interest = point.coords[self.abh.attributes.index('interest')]
+                        if EBIT == 0 or assets == 0:
+                            point.coords.append(0)
+                        else:
+                            point.coords.append(round(point.coords[self.abh.attributes.index('EBIT')] /
+                                                  point.coords[self.abh.attributes.index('assets')], 2) * 100) #ROA
+                        if EBIT == 0 or interest == 0:
+                            point.coords.append(0)
+                        else:
+                            point.coords.append(round(point.coords[self.abh.attributes.index('EBIT')] /
+                                                  point.coords[self.abh.attributes.index('interest')], 2)) #TIE
 
 
+
+                        point.n = 31
+                    self.abh.clusters[cluster].dim = 31
+                    self.abh.clusters[cluster].centroid = self.abh.clusters[cluster].calculateCentroid()
+                self.refresh_cluster_data()
+                first_critical = True
+                req_names = ["BAD", "GOOD"]
+                while True:
+                    print("CIKEL ST: ", self.cikel_nbr, " |", len(self.abh.clusters))
+                    if self.cikel_nbr >= 300 or self.constraint_count > t:
+                        print("++++++ stevilo omejitev je cez mejo", self.constraint_count, t)
+                        break
+                    if len(self.abh.clusters) > n_clusters:
+                        print("+++++++ st clustrov > n_ clusters", len(self.abh.clusters))
+                        break
+                    self.abh.get_candidates()
+                    print("ST KRITICNIH PRIMEROV: ", len(self.abh.candidates))
+                    if len(self.abh.candidates) == 0:
+                        print("+++++ zmankalo je kandidatov")
+                        break
+                    if first_critical:
+                        test = False
+                        self.abh.critical_example.append(self.abh.candidates[0])
+                    else:
+                        test = True
+                        print("+++++++", self.abh.candidates)
+                        for cand in self.abh.candidates:
+                            print(cand[0].cheat, self.cluster_name_to_int(cand[0].cheat) , cand[1])
+                            if self.cluster_name_to_int(cand[0].cheat) != cand[1]:  # ni v pravem clustru
+                                self.abh.critical_example.append(cand)
+                                test = False
+                                break
+                    print("Found critical Example", )
+                    print(test)
+                    if test or self.abh.NMI >= 1:
+                        # self.refresh_cluster_data()
+                        print("+++++KONEC: ",test, self.abh.NMI)
+                        break
+                    self.counter = self.abh.get_pair(self.abh.critical_example[-1][1])
+                    counter_list = []
+
+                    if self.counter[0].cheat == self.abh.critical_example[-1][0].cheat:  # protiprimer je enak kriticnemu primeru
+                        counter_list.append({'example': self.counter, 'act': 2})
+                    else:
+                        counter_list.append({'example': self.counter, 'act': 1})
+                    arguments = []
+                    if self.abh.critical_example[-1][0].cheat == 'BAD':
+                        arguments.append(['net.income', '<', '122'])
+                        arguments.append(['equity.ratio' , '<' ,'0'])
+                        arguments.append(['current.ratio' , '<' ,'0'])
+
+                    if self.abh.critical_example[-1][0].cheat == 'GOOD':
+                        arguments.append(['net.income', '>', '122'])
+                        arguments.append(['equity.ratio','>','0'])
+                        arguments.append(['current.ratio','>','0'])
+
+                    arg_dic = {'point': self.abh.critical_example[-1], 'counter': counter_list,
+                               'current_cluster': self.abh.critical_example[-1][1], 'arguments': arguments}
+                    self.abh.condition.append(arg_dic)
+                    # get counters
+                    for condition in self.abh.condition:
+                        self.log(
+                            "Counter examples for critical example: Example " + str(
+                                condition["point"][0].reference) + "\n")
+
+                        counters = self.abh.counter_example(condition)
+                        for counter in counters:
+                            if self.abh.critical_example[-1][0].cheat == counter[0].cheat:
+                                act = 2
+                            else:
+                                act = 1
+                            counter_list = [{'example': counter, 'act': act}]
+                            condition["counter"] = condition["counter"] + counter_list
+
+                    self.improve_hc()
+
+                    self.abh.clusters = self.abh.rebuildClusters(self.updatedClusters.copy(), n_clusters)
+
+                    self.refresh_cluster_data()
+                # Write report
+                f = open('report_150cons.txt', 'a')
+                o = str(t) + '| '+ str(self.test_nbr) + ': Cikles: ' + str(self.cikel_nbr) + ' constraints: ' + str(
+                    (self.constraint_count)) + ' ARI: ' + str(self.abh.ARI) + ' NMI: ' + str(self.abh.NMI)
+                o = o + " first_critical: " + str(first_critical) + " test: " + str(test) + "\n"
+
+                f.write(o)  # python will convert \n to os.linesep
+                f.close()  # you can omit in most cases as the destructor will call it
 
 
 
