@@ -6,7 +6,7 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from math import log
 from numpy import bincount
-
+from tabulate import tabulate
 
 compare = lambda x, y: collections.Counter(x) == collections.Counter(y)
 
@@ -27,12 +27,13 @@ class Point:
         self.fb_url = fb_url
 
     def __repr__(self):
-        return str(self.reference)+": "+str(self.coords)
+        point_str = str(self.reference) + ": " + str(self.coords)
+        return (point_str[:55] + '..') if len(point_str) > 55 else point_str
 
     def getDistance(self, b):
         if self.n != b.n: raise Exception("ILLEGAL: non comparable points")
-        ret = functools.reduce(lambda x,y: x + pow((self.coords[y]-b.coords[y]), 2),range(self.n),0.0)
-        return (ret)
+        return math.sqrt(sum((a - b) ** 2 for a, b in zip(self.coords, b.coords)))
+
         #return reduce(lambda x,y: x+(self.coords[y]-b.coords[y]),range(self.n),0.0)
     def __eq__(self, other):
         if hasattr(other, 'coords') and hasattr(other, 'n'):
@@ -63,12 +64,17 @@ class Cluster:
         """
         Calculate the new cluster centroid
         """
+        #print("RACUNAM NOV CENTORID: ", self.dim)
         reduce_coord = lambda i:functools.reduce(lambda x,p : x + p.coords[i],self.points,0.0)
         if len(self.points) <= 0:
             centroid_coords = [0 for i in range(self.dim)]
         else:
+            if len(self.points) > 0:
+                self.dim = self.points[0].n
+
             centroid_coords = [reduce_coord(i)/len(self.points) for i in range(self.dim)]
             centroid_coords = [round(elem, 2) for elem in centroid_coords]
+            #print("NOVE KOORDINATE : ", len(centroid_coords))
         return Point(centroid_coords, None, self.name)
 
     def update(self, id1, id2, dist, tocke):
@@ -94,6 +100,55 @@ class Cluster:
             return
         self.avrage_distance = sum_d/n
 
+    def printStats(self, abh):
+        o = "======" + str(self.name) + "=======\n"
+        o += "Atributes: \n"
+        table = []
+        for i, label in enumerate(abh.attributes):
+            row = []
+            row.append(label)
+            p = self.centroid
+            if isinstance(p, tuple):
+                pr = str(p[0].coords[i])
+            else:
+                try:
+                    pr = str(p.centroid.coords[i])
+                except:
+                    if len(p.coords) <= i:
+                        if p.meta_data is not None:
+                            if p.meta_data[label] is not None:
+                                pr = str(p.meta_data[label])
+
+                    else:
+                        pr = str(p.coords[i])
+            pr = '{:.2f}'.format(float(pr))
+            row.append(pr)
+            table.append(row)
+        print(tabulate(table, floatfmt=".2f"))
+        o += tabulate(table, floatfmt=".2f") + "\n"
+
+        o += "Number of cases: " + str(len(self.points)) + "\n"
+        if self.purity:
+            o+="Number of cases with their real classes: \n"
+            for key in self.purity:
+                o+="\t"+str(key)+": "+str(self.purity[key])+"\n"
+        s = float(len(abh.points))
+        if len(self.purity.values()) != 0:
+            o += "Purity: " + str(round((max(self.purity.values()) / s),2)) + "\n"
+        # self.log(str(cluster.purity))
+        # o+="NMI: "+str(cluster.nmi)+"\n"
+        self.stats()
+        # self.log("Purity: "+str(max(cluster.purity.values())/s)+"\n")
+
+        o += "Radius: " + str(round(self.max_distance,2)) + "\n"
+        o += "Avrage distance: " + str(round(self.avrage_distance,2)) + "\n"
+
+        h = [[], []]
+        for c in abh.clusters:
+            h[0].append(abh.clusters[c].name)
+            h[1].append(abh.clusters[c].centroid.getDistance(self.centroid))
+        o += tabulate([h[1]], headers=h[0], floatfmt=".2f") + "\n"
+        return o
 
 
 """

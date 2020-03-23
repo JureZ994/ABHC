@@ -1,3 +1,4 @@
+import functools
 
 __author__ = 'Jure'
 from cluster import Cluster, Point
@@ -15,7 +16,9 @@ from cluster import adjusted_rand_score
 import numpy as np
 from itertools import combinations
 import sys
-
+from scipy import spatial
+import pandas as pd
+from scipy.spatial import distance_matrix
 
 class ABHclustering:
     def __init__(self, points, points2,  clusters, attributes=None, candidates = None):
@@ -25,6 +28,7 @@ class ABHclustering:
         #point attributes
         self.attributes = attributes
         #silhouette treshold for critical examples
+        self.treshold = 1
         self.treshold = 1
         #critical examples
         self.candidates = candidates
@@ -43,6 +47,9 @@ class ABHclustering:
         self.dim = None
         self.distance_type = None
         self.distances={}
+        self.linkage = None
+        self.prev_dict = {}
+        self.diff = []
 
 
 
@@ -56,7 +63,10 @@ class ABHclustering:
         for example in self.clusters[cluster].points:
             if primer != example:
                 dist += self.points_distance(example, primer)
-        return dist / (len(self.clusters[cluster].points) - 1)
+        if len(self.clusters[cluster].points) - 1 == 0:
+            return 0
+        else:
+            return dist / (len(self.clusters[cluster].points) - 1)
 
     def getBi(self, point):
         razdalje = []
@@ -71,22 +81,144 @@ class ABHclustering:
         else:
             dist = 0
         return dist
+    def izbrisi_razdalje(self, kljuc):
+        #print("<<<<<<<<<")
+        for cluster in self.clusters:
+            if cluster != kljuc:
+                key3=str(cluster)+ " "+ str(kljuc)
+                key4=str(kljuc)+ " "+str(cluster)
+                z = [(a.reference,b.reference) for a in self.clusters[cluster].points for b in self.clusters[kljuc].points]
+                for l in z:
+                    key1=str(l[0])+" "+str(l[1])
+                    key2=str(l[1])+" "+str(l[0])
+                    #print(key1)
+                    self.distances.pop(key1, None)
+                    self.distances.pop(key2, None)
+                self.distances.pop(key3, None)
+                self.distances.pop(key4, None)
+        #print("<<<<<<<<<")
+    def dodaj_razdalje(self, kljuc):
+        #print("<>>>>>>>>>>>>>>>")
+        for cluster in self.clusters:
+            if cluster != kljuc:
+                key = str(cluster)+ " " + str(kljuc)
+                if self.linkage == "AVERAGE":
+                    z = [(a, b) for a in self.clusters[cluster].points for b in self.clusters[kljuc].points]  # hrani vse kombinacije c1 z c2
+                    dist = self.average_linkage(z)
+                elif self.linkage == "WARD":
+                    c=[]
+                    u=[]
+                    v=[]
+                    for p in self.clusters[cluster].points:
+                        c.append(p.coords)
+                        u.append(p.coords)
+                    for r in self.clusters[kljuc].points:
+                        c.append(r.coords)
+                        v.append(r.coords)
+                    centroid_UV = np.average(c, axis=0)
+                    centroid_U = np.average(u, axis=0)
+                    centroid_V = np.average(v, axis=0)
+                    dist1 = 0
+                    dist2 = 0
+                    dist3 = 0
+                    for point in c:
+                        if self.distance_type == "COSINUS":
+                            dist1 += spatial.distance.cosine(centroid_UV, point)
+                        elif self.distance_type == "EUCLIDIAN":
+                            dist1 += spatial.distance.euclidean(centroid_UV, point) ** 2
+                    for point in u:
+                        if self.distance_type == "COSINUS":
+                            dist2 += spatial.distance.cosine(centroid_U, point)
+                        elif self.distance_type == "EUCLIDIAN":
+                            dist2 += spatial.distance.euclidean(centroid_U, point) ** 2
+                    for point in v:
+                        if self.distance_type == "COSINUS":
+                            dist3 += spatial.distance.cosine(centroid_V, point)
+                        elif self.distance_type == "EUCLIDIAN":
+                            dist3 += spatial.distance.euclidean(centroid_V, point) ** 2
+                    dist = dist1-dist2-dist3
+                else:
+                    print("Napaka mere razdalj, uporabi WARD ali AVERAGE")
+                    exit(1)
+                #print(key)
+                self.distances.update({key: dist})
+        #print(">>>>>>>>>>>>>>>>>>")
+
 
     def hierarhicalClustering(self, clusters = None):
         """
         Main hierarhical clustering loop
         """
-
-        self.l.log("Finding clusters...")
+        self.l.log("Building distance matrix...")
         n = len(self.points)  #na začetku je vsak primer svoj cluster
+        data = []
+        for c in self.clusters:
+            p = [point.coords for point in self.clusters[c].points]
+            data.append(p[0])
+        df = pd.DataFrame(data,columns= np.array([a for a in self.attributes]))
+        n_df = (df.values)
+        self.d_matrix = np.zeros(((df.values).shape[0],(df.values).shape[0]))
+        for i in range((df.values).shape[0]):
+            for j in range((df.values).shape[0]):
+                kljuc1 = str(i)+' '+str(j)
+                kljuc2 = str(j)+' '+str(i)
+                if i != j:
+                    if kljuc1 in self.distances:
+                        continue
+                    elif kljuc2 in self.distances:
+                        continue
+                    else:
+                        if self.linkage == "WARD":
+                            l = []
+                            l.append(n_df[i])
+                            l.append(n_df[j])
+                            centroid = np.average(l,axis=0)
+                            dist = 0
+                            if self.distance_type == "COSINUS":
+                                dist += spatial.distance.cosine(centroid, n_df[i])**2
+                                dist += spatial.distance.cosine(centroid, n_df[j])**2
+                            elif self.distance_type == "EUCLIDIAN":
+                                dist += spatial.distance.euclidean(centroid, n_df[i])**2
+                                dist += spatial.distance.euclidean(centroid, n_df[i])**2
+                            self.distances.update({kljuc1: dist})
+                        elif self.linkage == "AVERAGE":
+                            if self.distance_type == "COSINUS":
+                                dist = spatial.distance.cosine(n_df[i], n_df[j])
+                            elif self.distance_type == "EUCLIDIAN":
+                                dist = spatial.distance.euclidean(n_df[i], n_df[j])
+                            self.distances.update({kljuc1: dist})
+                        else:
+                            print("Error creating distance matrix...")
+                            exit(1)
+
         idZ = 0
         m = len(self.points)
-        while(n != 1):
+        self.l.log("Finding clusters...")
+        while n > 1:
+            """
             dist, pair = self.closest_clusters()
             par = list()
             for el in pair:
                 par.append(el)
+           
+            dist = np.amin(self.d_matrix)
+            result = np.where(self.d_matrix == dist)
 
+            par = list()
+            for el in result[0]:
+                par.append(el)
+            print("--",par)
+            """
+            key = min(self.distances, key=self.distances.get)
+            par = key.split(' ')
+            par = [int(i) for i in par]
+            dist = self.distances[key]
+            #print("--------------------")
+            #print(par[0], par[1])
+            self.distances.pop(key, None)
+            self.izbrisi_razdalje(par[0])
+            self.izbrisi_razdalje(par[1])
+            #print("5 238" in self.distances)
             tocke = []
             tocke.append(self.clusters[par[0]].points)
             tocke.append(self.clusters[par[1]].points)
@@ -94,10 +226,21 @@ class ABHclustering:
             #print("tocke: ", len(tocke))
             novCluster = Cluster(m+idZ)
             novCluster.update(par[0], par[1], dist, tocke)
+            novCluster.centroid = novCluster.calculateCentroid()
             self.clusters.pop(par[0])
             self.clusters.pop(par[1])
             self.clusters.update({(m+idZ): novCluster})
-
+            #print("dodajam razdalje...")
+            self.dodaj_razdalje(m+idZ)
+            """
+            novCluster = Cluster(par[0])
+            novCluster.update(par[0], par[1], dist, tocke)
+            novCluster.centroid = novCluster.calculateCentroid()
+            self.clusters.pop(par[0])
+            self.clusters.pop(par[1])
+            self.clusters.update({(par[0]): novCluster})
+            #TODO: preracunaj razdalje v matriki razdalj
+            """
             if idZ == 0:
                 self.Z = [par[0], par[1], dist, novCluster.n]
             else:
@@ -106,17 +249,21 @@ class ABHclustering:
 
             n = len(self.clusters)
             #self.vseSilhuete.update({idZ: self.metodaSilhuet()})
-            print("par: ", par, ", dist: ", round(dist,2))
-            idZ+=1
-        print(len(self.Z))
+            print("par: ", par, ", dist: ", round(dist,10))
+            print(idZ, n, m+idZ)
+            idZ += 1
+
+        self.l.log("Dendrogram created...")
 
         #vrnil naj bi matriko Z, in rezultate metod, ki nam povejo koliko clustrov je
         #print("Optimalno stevilo clustrov po metodi silhuet: ", len(self.points)-1-max(self.vseSilhuete.items(), key=operator.itemgetter(1))[0])
         return self.clusters
     def rebuildClusters(self, clusters, steviloClustrov):
         self.l.log("Building clusters... ")
+
         m = len(self.points)
         for id in range(0, m - steviloClustrov):
+
             idc1 = self.Z[id][0]
             idc2 = self.Z[id][1]
             tocke = []
@@ -142,23 +289,54 @@ class ABHclustering:
         for key, n_key in zip(clusters.keys(), new_keys):
             clusters[n_key] = clusters.pop(key)
         return clusters
-
+    def calculateCentroid(self, c1, c2):
+        allPoints = []
+        for point in self.clusters[c1].points:
+            allPoints.append(point.coords)
+        for point in self.clusters[c2].points:
+            allPoints.append(point.coords)
+        reduce_coord = lambda i:functools.reduce(lambda x,p : x + p[i],allPoints,0.0)
+        centroid_coords = [reduce_coord(i)/len(allPoints) for i in range(len(allPoints[0]))]
+        centroid_coords = [round(elem, 2) for elem in centroid_coords]
+        return Point(centroid_coords, None, str(len(self.Z) + len(self.points)))
+    def distance(self, point, centroid):
+        if self.distance_type == "EUCLIDIAN":
+            return math.sqrt(sum((a - b) ** 2 for a, b in zip(point.coords, centroid.coords)))
+        elif self.distance_type == "COSINUS":
+            return spatial.distance.cosine(point.coords, centroid.coords)
     def cluster_distance(self, c1, c2):
         """
         Compute distance between two clusters.
         """
-        z = [(a,b) for a in self.clusters[c1].points for b in self.clusters[c2].points]   #hrani vse kombinacije c1 z c2
-        """
-        izračunaj min, max, average razdaljo med posameznimi elementi c1 z c2
-        v mojem primeru racunam average linkage
-        """
-        dist = self.average_linkage(z)
-        return dist
+        if self.linkage == "AVERAGE":
+            z = [(a,b) for a in self.clusters[c1].points for b in self.clusters[c2].points]   #hrani vse kombinacije c1 z c2
+            dist = self.average_linkage(z)
+            return dist
+        elif self.linkage == "WARD":
+            print("distanca1")
+            skupniCentorid = self.calculateCentroid(c1, c2)
+            print("distanca2")
+            sum1 = 0
+            sum2 = 0
+            sumBoth = 0
+            for point in self.clusters[c1].points:
+                sum1 += self.distance(point, self.clusters[c1].centroid)
+                sumBoth += self.distance(point, skupniCentorid)
+            for point in self.clusters[c2].points:
+                sum2 += self.distance(point, self.clusters[c2].centroid)
+                sumBoth += self.distance(point, skupniCentorid)
+            print("distanca3")
+            return (sumBoth - sum1 - sum2)
+
+        else:
+            self.log("Potrebno je nastaviti tip povezav, moznosti so: AVERAGE , WARD")
+            exit()
 
     def closest_clusters(self, clusters_checked=None):
         """
         Find a pair of closest clusters and returns the pair of clusters and their distance.
         """
+        print("iscem clustre...")
         if clusters_checked is None:
             dis, pair = min((self.cluster_distance(c1, c2), (c1, c2)) for c1, c2 in combinations(self.clusters, 2))
             return dis, pair
@@ -172,8 +350,6 @@ class ABHclustering:
                     pair = (c1,c2)
             return dis, pair
 
-
-
     def average_linkage(self, x):
         skupna_razdalja = 0
         for a, b in x:
@@ -184,6 +360,11 @@ class ABHclustering:
         """
         Returns Euclidean distance or cosinus similarity between two points.
         """
+        if self.distance_type == "EUCLIDIAN":
+            dist = spatial.distance.euclidean(p1.coords, p2.coords)
+        elif self.distance_type == "COSINUS":
+            dist = spatial.distance.cosine(p1.coords, p2.coords)
+        """
         kljuc1 = str(p1.reference)
         kljuc1+=' '
         kljuc1 += str(p2.reference)
@@ -191,7 +372,7 @@ class ABHclustering:
         kljuc2 = str(p2.reference)
         kljuc2+=' '
         kljuc2+= str(p1.reference)
-
+        
         if self.distance_type == "EUCLIDIAN":
             if kljuc1 in self.distances:
                 return self.distances[kljuc1]
@@ -202,16 +383,21 @@ class ABHclustering:
                 self.distances.update({kljuc1: dist})
             return self.distances[kljuc1]
         elif self.distance_type == "COSINUS":
-            presek = set(p1.coords) & set(p2.coords)
-            skalarni_produkt = 0
-            a = collections.Counter(p1.coords)
-            b = collections.Counter(p2.coords)
-            for coord in presek:
-                skalarni_produkt += a[coord] * b[coord]
-            cos = skalarni_produkt / (math.sqrt(sum(v1 ** 2 for v1 in p1.coords)) *
-                                          math.sqrt(sum(v2 ** 2 for v2 in p2.coords)))
-            return cos
-
+            if kljuc1 in self.distances:
+                return self.distances[kljuc1]
+            elif kljuc2 in self.distances:
+                return self.distances[kljuc2]
+            else:
+                dist = spatial.distance.cosine(p1.coords, p2.coords)
+                self.distances.update({kljuc1: dist})
+            return self.distances[kljuc1]
+        """
+        return dist
+    def getClusterID(self, point, clusters):
+        for cluster in clusters:
+            if point in clusters[cluster].points:
+                return cluster
+        return -1
     def getClusterId(self, point):
         for cluster in self.clusters:
             if point in self.clusters[cluster].points:
@@ -256,10 +442,84 @@ class ABHclustering:
         """
         Main hierarhical clustering loop
         """
-        self.l.log("Finding clusters...")
-        print("omejitve: ", len(constraints), len(self.distances))
-        #print("clustri: ", clusters)
+        self.l.log("Creating transitive ML closure...")
+        stevec = len(clusters)
+        for x in constraints:
+            if 'must-link' in x:
+                kluc1 = self.getClusterID(x['point'][0], clusters)
+                kluc2 = self.getClusterID(x['must-link'][0], clusters)
+                tocke = []
+                tocke.append(clusters[kluc1].points)
+                tocke.append(clusters[kluc2].points)
+                clusters.pop(kluc1)
+                clusters.pop(kluc2)
+                nov = Cluster(stevec)
+                nov.update(x['point'][0],x['must-link'][0], 0, tocke)
+                clusters.update({stevec: nov})
+                stevec += 1
+
+        self.l.log("Creating distance matrix....")
+        self.distances = {}
+
         self.clusters = clusters
+
+        z = [(clusters[a].clusterId, clusters[b].clusterId) for a in self.clusters for b in self.clusters]
+        for l in z:
+            kljuc1 = str(l[0])+" "+str(l[1])
+            kljuc2 = str(l[1])+" "+str(l[0])
+            if l[0] != l[1]:
+                if kljuc1 in self.distances:
+                    continue
+                elif kljuc2 in self.distances:
+                    continue
+                else:
+                    if self.linkage == "WARD":
+                        c = []
+                        u = []
+                        v = []
+
+                        for p in self.clusters[l[0]].points:
+                            c.append(p.coords)
+                            u.append(p.coords)
+                        for r in self.clusters[l[1]].points:
+                            c.append(r.coords)
+                            v.append(r.coords)
+                        centroid_UV = np.average(c, axis=0)
+                        centroid_U = np.average(u, axis=0)
+                        centroid_V = np.average(v, axis=0)
+                        dist1 = 0
+                        dist2 = 0
+                        dist3 = 0
+                        for point in c:
+                            if self.distance_type == "COSINUS":
+                                dist1 += spatial.distance.cosine(centroid_UV, point) **2
+                            elif self.distance_type == "EUCLIDIAN":
+                                dist1 += spatial.distance.euclidean(centroid_UV, point) ** 2
+                        for point in u:
+                            if self.distance_type == "COSINUS":
+                                dist2 += spatial.distance.cosine(centroid_U, point) **2
+                            elif self.distance_type == "EUCLIDIAN":
+                                dist2 += spatial.distance.euclidean(centroid_U, point) ** 2
+                        for point in v:
+                            if self.distance_type == "COSINUS":
+                                dist3 += spatial.distance.cosine(centroid_V, point) **2
+                            elif self.distance_type == "EUCLIDIAN":
+                                dist3 += spatial.distance.euclidean(centroid_V, point) ** 2
+                        dist = dist1 - dist2 - dist3
+                        self.distances.update({kljuc1: dist})
+                    elif self.linkage == "AVERAGE":
+                        u = [(a, b) for a in self.clusters[l[0]].points for b in
+                             self.clusters[l[1]].points]
+                        dist = self.average_linkage(u)
+                        self.distances.update({kljuc1: dist})
+                    else:
+                        print("Error creating distance matrix...")
+                        exit(1)
+
+        self.l.log("Finding clusters...")
+        print("st. omejitev: ", len(constraints))
+        #print("clustri: ", clusters)
+
         self.Z = np.array([])
         n = len(self.points)  #na začetku je vsak primer svoj cluster
         idZ = 0
@@ -267,8 +527,9 @@ class ABHclustering:
         stop_clustering = False
         while(n != final_n_of_clusters):
             condition = True
-            clusters_checked = []
+            #clusters_checked = []
             while condition:
+                """
                 if len(clusters_checked) == len(self.clusters):
                     print("Ni mozno nadaljne zruzevanje, ostalo je ",len(self.clusters)," clustrov.")
                     break
@@ -280,8 +541,10 @@ class ABHclustering:
                 for el in pair:
                     par.append(el)
                 self.constraints = self.sort_constraints()
+              
                 #ali ima katerakoli tocka iz obeh clustrov ML, jo zdruzi in ponovno poisci najblizja clustra
-                ML_pair = self.check_must_link(constraints, self.clusters[par[0]].points)
+                #ML_pair = self.check_must_link(constraints, self.clusters[par[0]].points)
+                
                 if ML_pair == -1:
                     ML_pair = self.check_must_link(constraints, self.clusters[par[1]].points)
                 if ML_pair != -1:
@@ -291,21 +554,46 @@ class ABHclustering:
                 if condition:
                     clusters_checked.append([par[0], par[1]])
                 dist = self.cluster_distance(par[0], par[1])
+                
+                
             if stop_clustering:
                 break
             #print("par: ", par, ", dist: ", round(dist,2), " ", len(self.clusters))
+                """
 
+                key = min(self.distances, key=self.distances.get)
+                kljuc = key
+                par = key.split(' ')
+                par = [int(i) for i in par]
+                dist = self.distances[key]
+                if self.check_cannot_link(constraints,self.clusters[par[0]].points,self.clusters[par[1]].points):
+                    self.distances[kljuc] = sys.maxsize
+                    if dist == sys.maxsize:
+                        self.l.log("ABHC cannot find clusturs under those constraints...")
+                        exit(-1)
+                    print("True", par)
+                else:
+                    break
+                # print("--------------------")
+                # print(par[0], par[1])
+            self.distances.pop(key, None)
+            self.izbrisi_razdalje(par[0])
+            self.izbrisi_razdalje(par[1])
             tocke = []
             tocke.append(self.clusters[par[0]].points)
             tocke.append(self.clusters[par[1]].points)
 
-            #print("tocke: ", tocke)
+            #print("tocke: ", len(tocke))
             novCluster = Cluster(m+idZ)
             novCluster.update(par[0], par[1], dist, tocke)
+            novCluster.centroid = novCluster.calculateCentroid()
             self.clusters.pop(par[0])
             self.clusters.pop(par[1])
-            self.clusters.update({m+idZ: novCluster})
+            self.clusters.update({(m+idZ): novCluster})
+            #print("dodajam razdalje...")
+            self.dodaj_razdalje(m+idZ)
 
+            print("par: ", par, "dist: ", dist, idZ, len(self.clusters))
             if idZ == 0:
                 self.Z = [par[0], par[1], dist, novCluster.n]
             else:
@@ -313,10 +601,33 @@ class ABHclustering:
                 self.Z = np.vstack([self.Z, newrow])
 
             n = len(self.clusters)
-            idZ+=1
-
+            idZ += 1
+        #zapomni si primere, kateri so v drugi skupini kot v prejšni iteraciji.
+        self.diff = []
+        clusters_checked = set()
+        for cluster in self.clusters:
+            val = -1
+            for point in self.clusters[cluster].points:
+                if val < 0:
+                    val = self.prev_dict[point.reference]
+                    if val in clusters_checked:
+                        self.diff.append(point.reference)
+                else:
+                    if val != self.prev_dict[point.reference]:
+                        self.diff.append(point.reference)
+            clusters_checked.add(val)
+        self.prev_dict = self.make_dict()
+        print(len(self.diff))
+        print(sorted(self.diff))
         return self.clusters
-
+    def make_dict(self):
+        i = 0
+        dict = {}
+        for c in self.clusters:
+            for p in self.clusters[c].points:
+                dict.update({p.reference: i})
+            i += 1
+        return dict
     def silhouette(self):
         """
         Calculating silhouette index for each point and adding it to its attribute

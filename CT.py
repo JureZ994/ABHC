@@ -40,12 +40,11 @@ class CT:
 
         for cluster in abh.clusters:
             o += "======"+str(abh.clusters[cluster].name)+"=======\n"
-            o += "Atributes: "
+            o += "Atributes: \n"
             table = []
-            print(len(abh.attributes))
             p = abh.clusters[cluster].centroid
-            print(p)
             for i,label in enumerate(abh.attributes):
+
                 row = []
                 row.append(label)
                 #log(label+"", "")
@@ -58,11 +57,14 @@ class CT:
                     try:
                         pr = str(p.centroid.coords[i])
                     except:
+                        #print(i)
+                        #print(p)
                         pr = str(p.coords[i])
 
+                pr = '{:.2f}'.format(float(pr))
                 row.append(pr)
                 table.append(row)
-            o += tabulate(table)+"\n"
+            o += tabulate(table, floatfmt=".2f")+"\n"
 
 
             o += "Number of cases:"+str(len(abh.clusters[cluster].points))+"\n"
@@ -80,14 +82,14 @@ class CT:
             for c in abh.clusters:
                 h[0].append(abh.clusters[c].name)
                 h[1].append(abh.clusters[c].centroid.getDistance(abh.clusters[cluster].centroid))
-            o += tabulate([h[1]], headers=h[0])+"\n"
+            o += tabulate([h[1]], headers=h[0], floatfmt=".2f")+"\n"
         f1=open(self.file, 'a')
         f1.write(o+"\n")
         f1.close()
         return o
 
     def conditions(self, abk):
-        save = "############CONDITIONS################\n"
+        save = "########CONDITIONS MADE IN THIS ITERATION############\n"
         dict_constraints = {"must-link":0, "cannot-link":0, "no-link":0}
         dict_attr_arguments = defaultdict(lambda: defaultdict(int))
         for condition in abk.condition:
@@ -138,6 +140,7 @@ class CT:
             max_string_len = len("Attribute")
         # WE ADD THE POINTS ATTRIBUTES
         table = [['Index']+list(range(start,end))]
+        size = [0 for a in range(0, len(points))]
         for i,label in enumerate(abk.attributes):
             row = []
             add_spaces=""
@@ -160,7 +163,6 @@ class CT:
                         atr_dif = str(round(p[0].coords[i]-fp[0].coords[i], 2))
                     else:
                         atr_dif = str(round(p[0].coords[i]-fp.coords[i]), 2)
-
                 else:
                     try:
                         if len(p.coords) <= i:
@@ -181,15 +183,42 @@ class CT:
                             continue
                         pr = str(round(p.coords[i], 2))
                         atr_dif = str(round(p.coords[i]-fp.coords[i], 2))
-
-                row.append(pr+" ("+atr_dif+")")
+                line = pr+" ("+atr_dif+")"
+                if len(line) > size[inx]:
+                    size[inx] = len(line)
+                row.append(line)
             table.append(row)
 
         table2=[]
-
+        add_spaces = ""
+        if len("Attribute") < max_string_len:
+            add_spaces = " " * (max_string_len - len("Attribute")-2)
+        h2= ["Attribute"+add_spaces]
+        for i in range(0,len(points)):
+            #log(str(i)+" Example "+str(points[i].reference)+" ".rjust(5), "")
+            if isinstance(points[i], tuple):
+                label = " (Example "+str(points[i][0].reference)+")"
+                add_sp = ""
+                if len(label) < size[i]:
+                    add_sp = " " * (size[i]-len(label)-2)
+                h2.append(label+add_sp)
+            else:
+                try:
+                    label = " ("+str(points[i].name)+")"
+                    add_sp = ""
+                    if len(label) < size[i]:
+                        add_sp = " " * (size[i] - len(label)-2)
+                    h2.append(label+add_sp)
+                except:
+                    label = " (Example "+str(points[i].reference)+")"
+                    add_sp = ""
+                    if len(label) < size[i]:
+                        add_sp = " " * (size[i] - len(label)-2)
+                    h2.append(label+add_sp)
         #WE ADD THE POINTS CURRENT CLUSTER
         row = ["CLUSTER"]
         for inx, p in enumerate(points):
+
             if isinstance(p, tuple):
                 pr = str(abk.clusters[p[1]].name)
             else:
@@ -202,32 +231,29 @@ class CT:
             row.append(pr)
         table2.append(row)
         #WE ADD THE POINTS SILHUETTE VALUE
-        row = ["Silhuette"]
+        name = "Silhuette"
+        if len(name) < max_string_len:
+            add_spaces = " " * (max_string_len - len(name))
+        row = [name + add_spaces]
         for inx, p in enumerate(points):
 
             if isinstance(p, tuple) and p[0].silhuette:
                 row.append(str(round(p[0].silhuette,2)))
             else:
-                row.append("0")
+                if p.silhuette is None:
+                    row.append("0")
+                else:
+                    row.append(str(round(p.silhuette, 2)))
 
         table2.append(row)
 
 
-
-
-        """
-        row = ["cheat"]
-        for inx, p in enumerate(points):
-
-            if isinstance(p, tuple) and p[0].cheat:
-                row.append(str(p[0].cheat))
-            else:
-                row.append("--")
-
-        table2.append(row)
-        """
         for i, cluster in enumerate(abk.clusters):
-            row = [str(abk.clusters[cluster].name)+" D"]
+            add_spaces=""
+            name = str(abk.clusters[cluster].name)+" D"
+            if len(name) < max_string_len:
+                add_spaces = " " * (max_string_len-len(name))
+            row = [name+add_spaces]
             for inx, p in enumerate(points):
                 if isinstance(p, tuple) and p[0].distances and len(p[0].distances) > i:
                     row.append(round(p[0].getDistance(abk.clusters[cluster].centroid),2))
@@ -237,16 +263,9 @@ class CT:
                     row.append(round(p.getDistance(abk.clusters[cluster].centroid),2))
                 else:
                     row.append(round(p.centroid.getDistance(abk.clusters[cluster].centroid),2))
-
-
             table2.append(row)
-
-
-
-
-
         o += tabulate(table, headers=h)+"\n"
-        o += tabulate(table2, headers=h)+"\n"
+        o += tabulate(table2, headers=h2)+"\n"
         f1=open(self.file, 'a')
         f1.write(o+"\n")
         f1.close()

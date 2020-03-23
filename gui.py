@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 # __author__ = 'peter'
+import functools
+import itertools
 import os
 from tkinter import *
+
+import math
+
 from ABHclustering import ABHclustering
 from cluster import Cluster, Point
 import sys
@@ -12,7 +17,6 @@ from CT import CT
 RUN_SET = "BONITETE"
 LOG_NAME = "results.log"
 TEST_CONST = [10, 30, 60, 100, 150, 200, 250, 300, 400]
-
 
 class App:
     def __init__(self, master):
@@ -26,14 +30,14 @@ class App:
         self.step = 0
 
         self.autorun = None
-        self.autorun = Button(menu_frame, text="Autorun", command=self.bot2)
-        self.autorun.pack(side=LEFT)
-        frame = Frame(bg="red")
+        #elf.autorun = Button(menu_frame, text="Autorun", command=self.bot2)
+        #self.autorun.pack(side=LEFT)
+        frame = Frame()
         frame.pack(expand=1, fill='both', side=RIGHT)
         self.frame = frame
 
         cikel_frame = Frame()
-        cikel_frame.pack(expand=1, fill=X, side=TOP)
+        cikel_frame.pack(expand=1, fill=X, side=TOP, anchor=NW)
         self.cikel_frame = cikel_frame
 
         info_frame = Frame()
@@ -41,19 +45,18 @@ class App:
         self.info_frame = info_frame
 
         self.cikel_label = StringVar()
-        Label(self.cikel_frame, textvariable=self.cikel_label, justify=LEFT).pack(side=TOP, anchor=W)
+        Label(self.cikel_frame, textvariable=self.cikel_label, justify=LEFT).pack(side=TOP, anchor=NW)
 
         self.info_label = StringVar()
-        self.info_label.set("===================================\nCritical Examples:\n")
-        Label(self.info_frame, textvariable=self.info_label, justify=LEFT).pack(side=TOP, anchor=W)
+        self.info_label.set("Clusters found:\n")
+        Label(self.info_frame, textvariable=self.info_label, font="Helvetica 14 bold italic", justify=LEFT).pack(side=TOP, anchor=SW)
 
-        self.listbox = Listbox(self.info_frame, width="50")
-        self.listbox.pack(side=TOP, anchor=W)
-        self.listbox.bind("<Double-Button-1>", self.display_critical_data)
+        #self.listbox = Listbox(self.info_frame, width="50")
+        #self.listbox.pack(side=BOTTOM, anchor=SW)
 
-        self.details_label = StringVar()
-        self.details_label.set("")
-        Label(self.info_frame, textvariable=self.details_label, justify=LEFT).pack(side=TOP, anchor=W)
+        #self.details_label = StringVar()
+        #self.details_label.set("")
+        #Label(self.info_frame, textvariable=self.details_label, justify=LEFT).pack(side=BOTTOM, anchor=SW)
 
         # self.output_field = Text(master, height=10, width=80)
         # self.output_field.pack(side=LEFT, fill=BOTH, expand=1)
@@ -67,7 +70,8 @@ class App:
         self.cluster_output.bind('<<Modified>>', self.showEnd)
         # self.output_field.bind('<<Modified>>',self.showEndOutput)
 
-        # master.geometry('800x550')
+        master.geometry("{0}x{1}+0+0".format(
+            master.winfo_screenwidth()-100, master.winfo_screenheight()-100))
         self.final_n_of_clusters = None
         self.my_clusters = None
         self.n_clusters_index_start = 0
@@ -86,7 +90,7 @@ class App:
         elif RUN_SET == "BONITETE":
             self.init_bonitete()
 
-        self.hc_button = Button(menu_frame, text="Start Hierarhical Clustering", command=self.hierarhicalClustering)
+        self.hc_button = Button(menu_frame, text="Start Hierarchical Clustering", command=self.hierarhicalClustering)
         self.hc_button.pack(side=LEFT)
 
         self.determine_button = None
@@ -98,11 +102,13 @@ class App:
         self.improve_button = None
         self.prev_button = None
         self.next_button = None
+        self.plot_clusters_button = None
+        self.labels = []
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Ready\n"
+                                                                    "Hierarchical clustering: Ready\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters:\n"
                                                                     "-----------------------------------------\n"
@@ -120,41 +126,13 @@ class App:
         for i, c in enumerate(self.abh.condition):
             self.listbox.insert(END, "Example " + str(c['point'][0].reference))
             self.map_point_name_to_point["Example " + str(c['point'][0].reference)] = c['point']
-    def open_cluster_window(self, cluster):
-        if hasattr(self, 'top'):
-            self.top.destroy()
-        top = self.top = Toplevel(self.master)
-
-        self.top.point_frame = None
-        o = cluster.__repr__()
-        f = self.top.list_frame = Frame(self.top)
-        f.pack(expand=1, fill='both', side=LEFT, anchor=NW)
-
-
-        scrollbar = Scrollbar(f)
-        scrollbar.pack( side = RIGHT, fill=Y )
-
-        self.cluster_listbox = Listbox(f, width=30, yscrollcommand = scrollbar.set )
-        self.cluster_listbox.pack(expand=1, fill='both', side=TOP, anchor=W)
-        self.cluster_listbox.bind("<<ListboxSelect>>", lambda e,cluster=cluster:self.display_point_data(e,cluster))
-
-        self.cluster_listbox.delete(0, END)
-        self.cluster_listbox.insert(END, cluster)
-        self.log(cluster.__repr__())
-
-        for p in cluster.points:
-            self.cluster_listbox.insert(END, p)
-            self.log(p.__repr__())
-        scrollbar.config( command = self.cluster_listbox.yview )
-        self.cluster_listbox.select_set(0) #This only sets focus on the first item.
-        self.cluster_listbox.event_generate("<<ListboxSelect>>")
 
     def display_critical_data(self, ok):
         now = self.listbox.curselection()[0]
         name = self.listbox.get(ACTIVE)
         o = name + " " + str(self.abh.condition[now]['point'][0]) + "\n"
         o += "Old cluster: " + str(self.abh.clusters[self.abh.condition[now]['current_cluster']]) + "\n"
-        o += "New cluster: " + str(self.abh.clusters[self.abh.condition[now]['target_cluster']]) + "\n"
+        #o += "New cluster: " + str(self.abh.clusters[self.abh.condition[now]['target_cluster']]) + "\n"
         o += "Argument:\n"
         cond = self.abh.condition[now]['arguments']
         condn = len(cond)
@@ -222,17 +200,19 @@ class App:
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
         self.abh.dim = 4
+        self.abh.linkage = "AVERAGE"         #other possibility: AVERAGE
         self.abh.distance_type = "EUCLIDIAN"
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
-        self.data_filename ="IRIS_"
+        self.data_filename ="IRIS"
 
     def init_bonitete(self):
         """
         Finding critical examples from the bonitete dataset
         """
-
+        #OUTLIERS = [9, 11, 38, 62, 80, 82, 90, 94, 121, 126, 132, 136, 155, 156, 164, 165, 169, 173, 188]
+        OUTLIERS = []
         input = open('bonitete_tutor.tab', 'r')
         reader = csv.reader(input)
         atributi = next(reader)
@@ -244,13 +224,13 @@ class App:
         self.clustersCopy = {}
         self.updatedClusters = {}
         data = [d[:] for d in reader]
-
+        reference = 0
         for i, line in enumerate(data):
-            if i > 1:
+            if i > 1 and (i-2) not in OUTLIERS:
                 vrstica = line[0].split('\t')
                 vektor = []
                 cheat = None
-                reference = i-2
+
                 for j in range(2, 24):
                     vektor.append(float(vrstica[j]))
                 if vrstica[33] == "FALSE":
@@ -273,8 +253,10 @@ class App:
                 cluster.points.append(Point(vektor, cheat=cheat, reference=int(reference)))
                 cluster.primeri.append(reference)
                 self.clusters.update({reference: cluster})
+                self.clusters[reference].centroid = Point(vektor, None, int(reference))
                 self.clustersCopy.update({reference: cluster})
                 self.updatedClusters.update({reference: cluster})
+                reference += 1
                 #print(vrstica[atributi.index('lt.ebit.margin.change')] , " = ")
                 #a = float(vrstica[atributi.index('net.sales')]) - float(vrstica[atributi.index('cost.of.goods.and.services')]) - float(vrstica[atributi.index('cost.of.labor')]) - float(vrstica[atributi.index('financial.expenses')])
                 #print(float(vrstica[atributi.index('EBIT')] ) / float(vrstica[atributi.index('net.income')]))
@@ -301,21 +283,24 @@ class App:
                         #float(vrstica[atributi.index('assets')]) + float(vrstica[atributi.index('cash')]) + float(vrstica[atributi.index('inventories')]) + float(vrstica[atributi.index('lt.assets')]) )))
                 print("-----")
                 """
+
         self.points = points
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
+        self.abh.linkage = "WARD"         #other possibilities: AVERAGE , WARD
         self.abh.dim = 25
-        self.abh.distance_type = "EUCLIDIAN"
+        self.abh.distance_type = "COSINUS"       #other possibilities: EUCLIDIAN , COSINUS
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
-        self.data_filename="BONITETE_"
+        self.data_filename="BONITETE"
+
 
 
     def hierarhicalClustering(self):
         if self.step < 1:
             self.step = 1
-        self.log("Hierarhical clustering in cikel: " + str(self.cikel_nbr) + " with constraints: " + str(
+        self.log("Hierarchical clustering in cikel: " + str(self.cikel_nbr) + " with constraints: " + str(
             self.constraint_count) + "\n")
         self.master.config(cursor="wait")
         self.master.update()
@@ -324,7 +309,7 @@ class App:
         self.hc_button.destroy()
 
         if self.plot_button is None:
-            self.plot_button = Button(self.menu_frame, text="Plot", command=self.plot_popup)
+            self.plot_button = Button(self.menu_frame, text="Plot dendrogram", command=self.plot2D)
             self.plot_button.pack(side=LEFT)
         if self.determine_button is None:
             self.determine_button = Button(self.menu_frame, text="Determine number of clusters",
@@ -334,7 +319,7 @@ class App:
                                                                         "-----------------------------------------\n"
                                                                         "Initialization: Finished\n"
                                                                         "-----------------------------------------\n"
-                                                                        "Hierarhical clustering: Finished\n"
+                                                                        "Hierarchical clustering: Finished\n"
                                                                         "-----------------------------------------\n"
                                                                         "Determine the number of clusters: Ready\n"
                                                                         "-----------------------------------------\n"
@@ -371,6 +356,7 @@ class App:
             show_contracted=True,  # to get a distribution impression in truncated branches
         )
         plt.show(block=True)
+        self.plot_button.destroy()
         '''
 
         self.plot_popup()
@@ -378,7 +364,8 @@ class App:
         '''
 
     def plot_popup(self):
-        top = self.top = Toplevel(self.master)
+        self.plot_button.destroy()
+        #top = self.top = Toplevel(self.master)
         try:
             import numpy as np
             import math
@@ -390,7 +377,6 @@ class App:
             self.cluster_output.insert(e)
 
             return  # module doesn't exist, deal with it.
-
         plt.title('Hierarchical Clustering Dendrogram (truncated)')
         plt.xlabel('sample index or (cluster size)')
         plt.ylabel('distance')
@@ -404,7 +390,8 @@ class App:
         )
         plt.show(block=True)
 
-        b = Button(top, text="OK", command=self.plot_close).pack()
+        #b = Button(top, text="OK", command=self.plot_close).pack()
+
 
     def plot_close(self, event=None):
         self.top.destroy()
@@ -417,8 +404,13 @@ class App:
             self.final_n_of_clusters = int(self.helper)
             self.initialClusters = self.clustersCopy.copy()
             self.abh.clusters = self.abh.rebuildClusters(self.initialClusters, int(self.helper))
-            self.log(self.abh.l.clusters(self.abh))
+            #self.log(self.abh.l.clusters(self.abh))
+            self.refresh_cluster_data()
+            self.update_display_data()
             self.helper = None
+        if self.plot_clusters_button is None:
+            self.plot_clusters_button = Button(self.menu_frame, text="Plot clusters", command=self.plot_clusters)
+            self.plot_clusters_button.pack(side=LEFT)
         if self.rename_button is None:
             self.rename_button = Button(self.menu_frame, text="Rename clusters", command=self.rename_clusters)
             self.rename_button.pack(side=LEFT)
@@ -431,7 +423,7 @@ class App:
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "------------------------------------------\n"
@@ -446,19 +438,90 @@ class App:
         self.determine_button.destroy()
 
     def refresh_cluster_data(self):
+        void = self.abh.l.clusters(self.abh)
         self.log("============================================\n")
         self.log("============================================\n")
-        self.log("============================================\n")
-        self.log("ITER. NBR: "+str(self.cikel_nbr))
-        self.log(self.abh.l.clusters(self.abh))
+        self.log("ITERATION NUMBER: "+str(self.cikel_nbr)+"\n")
+        self.log("NMI: " +str(round(self.abh.NMI, 4)) +"\n")
+        self.log("ARI: " + str(round(self.abh.ARI, 4)) + "\n")
         f = open('points_Cikel' + str(self.cikel_nbr) + ".txt", 'w')
         for cluster in self.abh.clusters:
-            f.write(str(cluster) + " " + self.abh.clusters[cluster].name + "\n")
+            f.write("=====" + self.abh.clusters[cluster].name + "=====\n")
             self.abh.clusters[cluster].points.sort(key=lambda x: int(x.reference), reverse=False)
             for p in self.abh.clusters[cluster].points:
-                f.write(str(p) + " " + p.cheat + "\n")
+                f.write(str(p.reference) + " " + p.cheat + " " + str(p.coords)+"\n")
         f.close()
+        self.log("============================================\n")
+        self.log("============================================\n")
 
+    def plot_clusters(self):
+        try:
+            import matplotlib.pyplot as plt
+            import pandas as pd
+            import numpy as np
+            from sklearn.preprocessing import StandardScaler
+            from sklearn.decomposition import PCA
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            import pylab as pl
+            import plotly.express as px
+        except ImportError as e:
+            self.cluster_output.insert("Missing packages, cluster plots not supported....\n")
+            self.cluster_output.insert(e)
+
+            return  # module doesn't exist, deal with it.
+        #top = self.top = Toplevel(self.master)
+        color = ['blue', 'red', 'green', 'black', 'purple', 'orange']
+        podatki = np.array([])
+        for i, cluster in enumerate(self.abh.clusters):
+            if i == 0:
+                podatki = [p.coords for p in self.abh.clusters[cluster].points]
+            else:
+                podatki = np.vstack([podatki, [p.coords for p in self.abh.clusters[cluster].points]])
+            #print(np.array([p.coords for p in self.clusters[cluster].points]))
+            #print(np.array(self.attributes))
+
+
+        df = pd.DataFrame(podatki, columns= np.array([a for a in self.abh.attributes]))
+        df.head()
+        scaler = StandardScaler(copy=True, with_mean=True, with_std=True)
+        scaler.fit(df)
+        scaled_data = scaler.transform(df)
+        pca = PCA(copy=True, n_components=2, whiten=False)
+        pca.fit(scaled_data)
+        x_pca = pca.transform(scaled_data)
+
+        #fig = Figure(figsize=(6,6))
+        #a = fig.add_subplot(111)
+        counter = 0
+        plt.figure()
+        plt.xlim([math.ceil(x_pca[:, 0].min() - .5), math.ceil(x_pca[:, 0].max() + .5)])
+        plt.ylim([math.ceil(x_pca[:, 1].min() - .5), math.ceil(x_pca[:, 1].max() + .5)])
+        plt.xlabel('First principal component')
+        plt.ylabel('Second Principal Component')
+        for i,cluster in enumerate(self.abh.clusters):
+            for j in self.abh.clusters[cluster].points:
+
+                #plt.annotate(str(j.reference), xy=j.coords, xytext=(0, 0), color="black")
+                #a.text(x_pca[counter, 0], x_pca[counter, 1], str(j.reference), color='black', fontsize=7)
+                pl.text(x_pca[counter, 0], x_pca[counter, 1], str(j.reference), color='black', fontsize=9)
+                #a.plot(x_pca[counter, 0], x_pca[counter, 1], marker=str(j.reference),color='black')
+                #a.scatter(x_pca[counter][0], x_pca[counter][1], color=color[i])
+                plt.scatter(x_pca[counter, 0], x_pca[counter, 1], marker='o', c=color[i], s=100)
+                counter += 1
+        #a.scatter(v,x,color='red')
+
+        #a.invert_yaxis()
+
+        #a.set_title ("Estimation Grid", fontsize=16)
+        #a.set_ylabel("Second Principal Component", fontsize=14)
+        #a.set_xlabel("First principal component", fontsize=14)
+
+        #canvas = FigureCanvasTkAgg(fig, master=top)
+        #canvas.get_tk_widget().pack()
+        #canvas.draw()
+
+        plt.show(block=True)
 
 
 
@@ -469,20 +532,23 @@ class App:
 
             print_list = [self.abh.clusters[cluster].centroid] + self.abh.clusters[cluster].points[0:nbr]
 
-            self.rename_popup(self.abh.l.candidates(self.abh, print_list, 0, nbr), self.abh.clusters[cluster].name)
+            self.rename_popup(self.abh.l.candidates(self.abh, print_list, 0, nbr+1), self.abh.clusters[cluster].name)
             self.master.wait_window(self.top)
             if self.helper != None:
                 self.abh.clusters[cluster].name = self.helper
                 self.helper = None
         self.refresh_cluster_data()
+        self.update_display_data()
         # name = raw_input("Clusters new name:")
         # self.l.log('\n')
         # cluster.name = name
 
     def get_criticals(self):
+        self.abh.prev_dict = self.abh.make_dict()
         if self.abh.candidates == None or len(self.abh.candidates) == 0:
             self.log("Finding critical examples...\n")
             self.abh.get_candidates()
+            self.update_display_data()
         self.log("Found " + str(len(self.abh.candidates)) + " critical examples\n")
         start = self.critical_index_start
         self.pick_critical_popup(self.critical_index_start, self.critical_index_end)
@@ -504,18 +570,20 @@ class App:
         self.abh.critical_example.append(self.abh.candidates[int(self.helper)])
         self.abh.candidates.remove(self.abh.critical_example[-1])
 
-        self.log(
-            "We picked Example " + str(self.abh.critical_example[-1][0].reference) + " now we need to argument it.\n")
-        print("KRITICNI PRIMER: ", self.abh.critical_example)
+        #self.log("We picked Example " + str(self.abh.critical_example[-1][0].reference) + " now we need to argument it.\n")
+        #print("KRITICNI PRIMER: ", self.abh.critical_example)
+
         if self.argument_button is None:
             self.argument_button = Button(self.menu_frame, text="Argument constraint", command=self.argument_steps)
             self.argument_button.pack(side=LEFT)
+        if str(self.argument_button['state']) == 'disabled':
+            self.argument_button['state'] = 'normal'
 
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "-----------------------------------------\n"
@@ -529,25 +597,26 @@ class App:
 
     def argument_steps(self):
         print("ARGUMENTIRAJ KRITICNI PRIMER")
+        """
         if len(self.listbox.curselection()) != 0:
             critical_point = self.map_point_name_to_point[self.listbox.get(self.listbox.curselection())][0]
         else:
-            critical_point = self.abh.critical_example[-1][0]
+        """
+        critical_point = self.abh.critical_example[-1][0]
         # Informative print of clusters - reference points
         # We present clusters to expert for better understanding
-        for cluster in self.abh.clusters:
-            self.log("Cluster " + str(self.abh.clusters[cluster].centroid) + ":  distance: " + str(
-                critical_point.getDistance(self.abh.clusters[cluster].centroid)) + "\n")
+        #for cluster in self.abh.clusters:
+            #self.log("Cluster " + str(self.abh.clusters[cluster].name) + ":  distance: " + str(critical_point.getDistance(self.abh.clusters[cluster].centroid)) + "\n")
 
         # We present the example to the expert
 
-        self.log("Critical Example is in cluster: " + self.abh.clusters[self.abh.critical_example[-1][1]].name + "\n")
+        #self.log("Critical Example is in cluster: " + self.abh.clusters[self.abh.critical_example[-1][1]].name + "\n")
         self.get_argument_with_pair_popup()
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "-----------------------------------------\n"
@@ -583,7 +652,7 @@ class App:
         if self.step < 3:
             self.step = 3
 
-        self.set_labels()
+        #self.set_labels()
         for i in range(0, len(self.abh.condition)):
             cond = self.abh.condition[i]['arguments']
             arg_str = "IF "
@@ -597,18 +666,21 @@ class App:
             arg_str += self.choice_string[self.abh.condition[i]['counter'][0]['act']] + " "
             arg_str += " WITH Example: " + str(self.abh.condition[i]['counter'][0]['example'][0].reference) + "\n"
 
-            self.log(arg_str)
+            #self.log(arg_str)
         # argument collected, allow fetching counter examples and argumenting them
+
+
         if self.counter_example_button is None:
             self.counter_example_button = Button(self.menu_frame, text="Argument counter examples",
                                                  command=self.counter_steps)
             self.counter_example_button.pack(side=LEFT)
-
+        if str(self.counter_example_button['state']) == 'disabled':
+            self.counter_example_button['state'] = 'normal'
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "-----------------------------------------\n"
@@ -621,9 +693,9 @@ class App:
                                                                     "Run ABHC:")
 
     def counter_steps(self):
-        print(self.abh.condition)
+        #print(self.abh.condition)
         for condition in self.abh.condition:
-            self.log("Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
+            #self.log("Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
 
             # open popup with data and ask to argument counter example
             counters = self.abh.counter_example(condition)
@@ -636,7 +708,7 @@ class App:
                                                                             "-----------------------------------------\n"
                                                                             "Initialization: Finished\n"
                                                                             "-----------------------------------------\n"
-                                                                            "Hierarhical clustering: Finished\n"
+                                                                            "Hierarchical clustering: Finished\n"
                                                                             "-----------------------------------------\n"
                                                                             "Determine the number of clusters: Finished\n"
                                                                             "-----------------------------------------\n"
@@ -656,13 +728,15 @@ class App:
                 self.step = 4
 
         if self.improve_button is None:
-            self.improve_button = Button(self.menu_frame, text="Hierarhical clustering", command=self.improve_hc)
+            self.improve_button = Button(self.menu_frame, text="Hierarchical clustering", command=self.improve_hc)
             self.improve_button.pack(side=LEFT)
+        if str(self.improve_button['state']) == 'disabled':
+            self.improve_button['state'] = 'normal'
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "-----------------------------------------\n"
@@ -721,7 +795,7 @@ class App:
 
         #self.log(text)
         text += self.abh.l.candidates(self.abh, self.abh.candidates[start:end], start, end)
-        self.log(text)
+        #self.log(text)
 
         top = self.top = Toplevel(self.master)
 
@@ -759,12 +833,14 @@ class App:
         self.top.destroy()
 
     def get_argument_with_pair_popup(self):
+        """
         if len(self.listbox.curselection()) != 0:
             critical_point = self.map_point_name_to_point[self.listbox.get(self.listbox.curselection())]
             critical_point_target = self.map_point_name_to_point[self.listbox.get(self.listbox.curselection())][1]
         else:
-            critical_point = self.abh.critical_example[-1]
-            critical_point_target = self.abh.critical_example[-1][1]
+        """
+        critical_point = self.abh.critical_example[-1]
+        critical_point_target = self.abh.critical_example[-1][1]
 
         self.counter = self.abh.get_pair(critical_point_target)
         # print("counter: ", self.counter)
@@ -904,6 +980,7 @@ class App:
                     a[0].set(self.izbira[0])
 
         self.support_frame.destroy()
+        self.update_display_data()
 
     def update_points(self):
         new_name = self.f.get()
@@ -914,7 +991,10 @@ class App:
         for cluster in self.abh.clusters:
             for point in self.abh.clusters[cluster].points:
                 if operand == '/':
-                    point.coords.append(round(point.coords[idAtr1] / point.coords[idAtr2], 2))
+                    if point.coords[idAtr2] == 0:
+                        point.coords.append(0.0)
+                    else:
+                        point.coords.append(round(point.coords[idAtr1] / point.coords[idAtr2], 2))
                 elif operand == '*':
                     point.coords.append(round(point.coords[idAtr1] * point.coords[idAtr2], 2))
                 elif operand == '+':
@@ -939,13 +1019,17 @@ class App:
                     a[0].set(self.izbira[0])
 
         self.support_frame.destroy()
+        self.update_display_data()
 
     def argument_pair_close(self):
         rule_dic = {}
+
+        """
         if len(self.listbox.curselection()) != 0:
             critical_point = self.map_point_name_to_point[self.listbox.get(self.listbox.curselection())]
         else:
-            critical_point = self.abh.critical_example[-1]
+        """
+        critical_point = self.abh.critical_example[-1]
 
         rule_dic["point"] = critical_point
         # condition[4] = int(critical_point.reference)
@@ -974,7 +1058,7 @@ class App:
             t = 0
         counter = [{'act': t, 'example': self.counter}]
         rule_dic['counter'] = counter
-        self.log(str(rule_dic))
+        #self.log(str(rule_dic))
         # We have our condition. find counter examples
         self.helper = rule_dic
         self.top.destroy()
@@ -985,14 +1069,14 @@ class App:
         print_list = [condition["point"], counter] + [self.abh.clusters[c].represent() for i, c in
                                                       enumerate(self.abh.clusters)]
 
-        self.log("Fetching argument for counter example\n")
+        #self.log("Fetching argument for counter example\n")
 
         # Ask if data is correct
         self.m = condition["point"]
         self.args = []
 
         text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
-        self.log(text)
+        #self.log(text)
 
         top = self.top = Toplevel(self.master)
 
@@ -1008,6 +1092,7 @@ class App:
         b = Button(top, text="OK", command=self.ce_argument_close).pack()
         b2 = Button(top, text="AND", command=self.argument_new).pack()
         b3 = Button(top, text="ADD ATTRIBUTE", command=self.attribute_new).pack()
+        b4 = Button(top, text="DELETE ATTRIBUTE", command=self.delete_att).pack()
 
         str_o = "Example " + str(counter[0].reference) + " has "
         for x in condition["arguments"]:
@@ -1060,7 +1145,7 @@ class App:
         counter = [{'act': t, 'example': self.counter}]
         rule_dic['counter'] = counter
 
-        self.log(str(rule_dic))
+        #self.log(str(rule_dic))
         # We have our condition. find counter examples
         self.helper = rule_dic
         self.top.destroy()
@@ -1071,7 +1156,7 @@ class App:
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finished\n"
                                                                     "-----------------------------------------\n"
@@ -1083,7 +1168,7 @@ class App:
                                                                     "-----------------------------------------\n"
                                                                     "Run ABHC: In progress")
 
-        self.log("Writing constraints from arguments...\n")
+        #self.log("Writing constraints from arguments...\n")
         constraints = []
         f = open('constraints_Cikel' + str(self.cikel_nbr) + ".txt", 'w')
         for c in self.abh.condition:
@@ -1103,13 +1188,13 @@ class App:
             f.write("NUMBER OF CONSTRAINTS: " + str(len(constraints)) + '\n')  # python will convert \n to os.linesep
             f.write("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')  # python will convert \n to os.linesep
         f.close()  # you can omit in most cases as the destructor will call it
-        self.log("iter: " + str(self.cikel_nbr) + '\n')
+        #self.log("iter: " + str(self.cikel_nbr) + '\n')
         self.log("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')
 
 
         self.abh.constraints = self.abh.constraints + constraints
         #self.log(str(self.abh.constraints) + '\n')
-        self.log(self.abh.l.conditions(self.abh))
+        self.log(self.abh.l.conditions(self.abh) + '\n')
 
         clusters = self.updatedClusters.copy()
 
@@ -1131,24 +1216,20 @@ class App:
             new_keys.append(i)
         for key, n_key in zip(self.abh.clusters.keys(), new_keys):
             self.abh.clusters[n_key] = self.abh.clusters.pop(key)
-        #self.refresh_cluster_data()
         self.abh.condition_history.append(self.abh.condition)
         self.abh.condition = []
         self.abh.candidates = []
 
-        self.argument_button = None
-        self.counter_example_button = None
-        self.improve_button = None
-
-
         self.step = 1
 
         self.cikel_nbr += 1
+        self.refresh_cluster_data()
+        self.update_display_data()
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
                                                                     "-----------------------------------------\n"
-                                                                    "Hierarhical clustering: Finished\n"
+                                                                    "Hierarchical clustering: Finished\n"
                                                                     "-----------------------------------------\n"
                                                                     "Determine the number of clusters: Finsihed\n"
                                                                     "-----------------------------------------\n"
@@ -1159,6 +1240,10 @@ class App:
                                                                     " Counter example constraints:\n "
                                                                     "-----------------------------------------\n"
                                                                     "Run ABHC:")
+
+        self.argument_button['state'] = 'disabled'
+        self.counter_example_button['state'] = 'disabled'
+        self.improve_button['state'] = 'disabled'
     def showEnd(self, event):
         self.cluster_output.see(END)
         self.cluster_output.edit_modified(0)  # IMPORTANT - or <<Modified>> will not be called later.
@@ -1176,9 +1261,10 @@ class App:
         Updates display data
         :return:
         """
+        """
         # Show file name
         o = "===========================\n"
-        o += "===========" + os.path.basename(self.data_filename) + "============\n"
+        o += "===========" + str(self.data_filename) + "============\n"
         o += "===========================\n"
         details_label = StringVar()
         details_label.set(o)
@@ -1192,16 +1278,83 @@ class App:
         details_label = StringVar()
         details_label.set(o)
         Label(self.frame, textvariable=details_label, justify=LEFT).pack(side=TOP, anchor=W)
-
+        """
         # show cluster centroids
+        if len(self.labels) > 0:
+            for label in self.labels:
+                label.destroy()
+
         for cluster in self.abh.clusters:
-            o = str(cluster)
+            if self.abh.clusters[cluster].name is not None:
+                o = str(self.abh.clusters[cluster].name)
+            else:
+                o = "Cluster "+str(self.abh.clusters[cluster])
+            self.abh.clusters[cluster].points.sort(key=lambda x: int(x.reference), reverse=False)
             details_label = StringVar()
             details_label.set(o)
-            l = Label(self.frame, textvariable=details_label, justify=LEFT, cursor='hand1')
+            l = Label(self.info_frame, textvariable=details_label, font="Helvetica 10 bold italic", justify=LEFT, cursor='hand1')
             l.pack(side=TOP, anchor=W)
             # On centroid click, open window with points
             l.bind("<Button-1>", lambda e, cluster=cluster: self.open_cluster_window(cluster))
+            self.labels.append(l)
+    def open_cluster_window(self, cluster):
+        if hasattr(self, 'top'):
+            self.top.destroy()
+        top = self.top = Toplevel(self.master)
+
+        self.top.point_frame = None
+        o = "Cluster" + str(self.abh.clusters[cluster])
+        f = self.top.list_frame = Frame(self.top)
+        f.pack(expand=1, fill='both', side=LEFT, anchor=NW)
+
+
+        scrollbar = Scrollbar(f)
+        scrollbar.pack( side = RIGHT, fill=Y )
+
+
+        self.cluster_listbox = Listbox(f, width=30, yscrollcommand = scrollbar.set)
+        self.cluster_listbox.pack(expand=1, fill='both', side=TOP, anchor=W)
+        self.cluster_listbox.bind("<<ListboxSelect>>", lambda e,cluster=cluster:self.display_point_data(e,cluster))
+
+        self.cluster_listbox.delete(0, END)
+        self.cluster_listbox.insert(END, o)
+        #self.log(self.abh.clusters[cluster].__repr__())
+
+        # dodaj tocke na levo stran
+        index = 0
+        for p in self.abh.clusters[cluster].points:
+            self.cluster_listbox.insert(END, p)
+            if int(p.reference) in self.abh.diff:
+                self.cluster_listbox.itemconfig((index+1), {'bg':'red'})
+            index +=1
+
+            #self.log(p.__repr__())
+        scrollbar.config( command = self.cluster_listbox.yview )
+        self.cluster_listbox.select_set(0) #This only sets focus on the first item.
+        self.cluster_listbox.event_generate("<<ListboxSelect>>")
+
+    def display_point_data(self, e, cluster):
+        index = int(self.cluster_listbox.curselection()[0])
+                # Frame with cikel info
+        if self.top.point_frame:
+            self.top.point_frame.pack_forget()
+        self.top.point_frame = Frame(self.top)
+        self.top.point_frame.pack(fill='both', side=LEFT, anchor="e")
+
+        self.top.point_label = StringVar()
+
+        if index == 0:
+            o=self.abh.clusters[cluster].printStats(self.abh)
+            print(o)
+            #self.log(o)
+            self.top.point_label.set(o)
+        else:
+            value = self.abh.clusters[cluster].points[index-1]
+            o='You selected case: "%s" \n' % (value)
+            o+=self.abh.l.candidates(self.abh, [value],0,1)
+            #self.log(o)
+            self.top.point_label.set(o)
+        self.top.label = Label(self.top.point_frame, textvariable=self.top.point_label, justify=LEFT,  font="Consolas 11").pack(side=TOP, anchor=W)
 
     def rename_clusters_auto(self, req_names):
         names = []
@@ -1295,7 +1448,7 @@ class App:
                     """
                     if self.abh.critical_example[-1][0].cheat == 'BAD':
                         arguments.append(['net.income', '<<<', ''])
-    
+
                     if self.abh.critical_example[-1][0].cheat == 'GOOD':
                         arguments.append(['net.income', '>>>', ''])
 
@@ -1307,8 +1460,7 @@ class App:
 
                     # get counters
                     for condition in self.abh.condition:
-                        self.log(
-                            "Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
+                        #self.log("Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
 
                         # open popup with data and ask to argument counter example
                         counters = self.abh.counter_example(condition)
