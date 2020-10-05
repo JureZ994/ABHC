@@ -65,7 +65,7 @@ class Cluster:
         Calculate the new cluster centroid
         """
         #print("RACUNAM NOV CENTORID: ", self.dim)
-        reduce_coord = lambda i:functools.reduce(lambda x,p : x + p.coords[i],self.points,0.0)
+        reduce_coord = lambda i:functools.reduce(lambda x,p : x + p.coords[i], self.points, 0.0)
         if len(self.points) <= 0:
             centroid_coords = [0 for i in range(self.dim)]
         else:
@@ -85,7 +85,7 @@ class Cluster:
             for p in points:
                 self.points.append(p)
                 self.primeri.append(p)
-        self.n = len(self.primeri)
+        self.n = len(self.points)
     def stats(self):
         sum_d = 0
         n=0
@@ -128,20 +128,22 @@ class Cluster:
         o += tabulate(table, floatfmt=".2f") + "\n"
 
         o += "Number of cases: " + str(len(self.points)) + "\n"
+        items=0
         if self.purity:
             o+="Number of cases with their real classes: \n"
             for key in self.purity:
                 o+="\t"+str(key)+": "+str(self.purity[key])+"\n"
+                items+=self.purity[key]
         s = float(len(abh.points))
         if len(self.purity.values()) != 0:
-            o += "Purity: " + str(round((max(self.purity.values()) / s),2)) + "\n"
+            o += "Purity: " + str(self.purity[key])+ "/" + str(items) + "\n"
         # self.log(str(cluster.purity))
         # o+="NMI: "+str(cluster.nmi)+"\n"
         self.stats()
         # self.log("Purity: "+str(max(cluster.purity.values())/s)+"\n")
 
         o += "Radius: " + str(round(self.max_distance,2)) + "\n"
-        o += "Avrage distance: " + str(round(self.avrage_distance,2)) + "\n"
+        o += "Average distance: " + str(round(self.avrage_distance,2)) + "\n"
 
         h = [[], []]
         for c in abh.clusters:

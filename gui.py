@@ -6,7 +6,7 @@ import os
 from tkinter import *
 
 import math
-
+from random import randint
 from ABHclustering import ABHclustering
 from cluster import Cluster, Point
 import sys
@@ -35,6 +35,34 @@ class App:
         frame = Frame()
         frame.pack(expand=1, fill='both', side=RIGHT)
         self.frame = frame
+
+        distance_frame = Frame()
+        distance_frame.pack(expand=1, fill=X, side=TOP, anchor=NW)
+        self.distance_frame = distance_frame
+
+        self.info_distance = StringVar()
+        self.info_distance.set("Distance between cases:\n")
+        Label(self.distance_frame, textvariable=self.info_distance, font="Helvetica 12 bold", justify=LEFT)\
+            .pack(side=TOP, anchor=NW)
+
+        self.distance_type = StringVar()
+        self.distance_choice = ['Cosine', 'Euclidean']
+        self.distance_type.set(self.distance_choice[0])  # default value
+        self.distance_menu = OptionMenu(self.distance_frame, self.distance_type, *self.distance_choice)\
+            .pack(side=TOP, anchor=N)
+
+        self.info_linkage = StringVar()
+        self.info_linkage.set("\nLinkage type:\n")
+        Label(self.distance_frame, textvariable=self.info_linkage, font="Helvetica 12 bold", justify=LEFT)\
+            .pack(side=TOP, anchor=NW)
+
+        self.linkage_type = StringVar()
+        self.linkage_choice = ['Average', 'Ward']
+        self.linkage_type.set(self.linkage_choice[0])  # default value
+        self.distance_menu = OptionMenu(self.distance_frame, self.linkage_type, *self.linkage_choice)\
+            .pack(side=TOP, anchor=N)
+
+
 
         cikel_frame = Frame()
         cikel_frame.pack(expand=1, fill=X, side=TOP, anchor=NW)
@@ -88,9 +116,11 @@ class App:
         if RUN_SET == "IRIS":
             self.init_iris()
         elif RUN_SET == "BONITETE":
-            self.init_bonitete()
+            #self.init_bonitete()
+            self.init_bonitete_pruned()
 
         self.hc_button = Button(menu_frame, text="Start Hierarchical Clustering", command=self.hierarhicalClustering)
+        #self.hc_button = Button(menu_frame, text="Constrained Agglomerative", command=self.CA)
         self.hc_button.pack(side=LEFT)
 
         self.determine_button = None
@@ -181,13 +211,14 @@ class App:
         reader = csv.reader(input)
         self.attributes = next(reader)
         points = []
-        data = [d[:] for d in reader]
+        self.data = [d[:] for d in reader]
 
         self.clusters = {}
         self.clustersCopy = {}
         self.updatedClusters = {}
+        self.oznake = []
         # Create points from data
-        for i, line in enumerate(data):
+        for i, line in enumerate(self.data):
             points.append(Point([float((line[x])) for x in range(0, len(line[:4]))], cheat=line[4], reference=i))
             cluster = Cluster(i)
             cluster.points.append(
@@ -196,12 +227,11 @@ class App:
             self.clusters.update({i: cluster})
             self.clustersCopy.update({i: cluster})
             self.updatedClusters.update({i: cluster})
+            self.oznake.append(i)
         self.points = points
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
         self.abh.dim = 4
-        self.abh.linkage = "AVERAGE"         #other possibility: AVERAGE
-        self.abh.distance_type = "EUCLIDIAN"
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
@@ -211,9 +241,7 @@ class App:
         """
         Finding critical examples from the bonitete dataset
         """
-        #OUTLIERS = [9, 11, 38, 62, 80, 82, 90, 94, 121, 126, 132, 136, 155, 156, 164, 165, 169, 173, 188]
-        OUTLIERS = []
-        input = open('bonitete_tutor.tab', 'r')
+        input = open('bonitete_tutor_copy.tab', 'r')
         reader = csv.reader(input)
         atributi = next(reader)
         atributi = [i.split('\t') for i in atributi]
@@ -225,12 +253,12 @@ class App:
         self.updatedClusters = {}
         data = [d[:] for d in reader]
         reference = 0
+        self.oznake = []
         for i, line in enumerate(data):
-            if i > 1 and (i-2) not in OUTLIERS:
+            if i > 1:
                 vrstica = line[0].split('\t')
                 vektor = []
                 cheat = None
-
                 for j in range(2, 24):
                     vektor.append(float(vrstica[j]))
                 if vrstica[33] == "FALSE":
@@ -257,45 +285,145 @@ class App:
                 self.clustersCopy.update({reference: cluster})
                 self.updatedClusters.update({reference: cluster})
                 reference += 1
-                #print(vrstica[atributi.index('lt.ebit.margin.change')] , " = ")
-                #a = float(vrstica[atributi.index('net.sales')]) - float(vrstica[atributi.index('cost.of.goods.and.services')]) - float(vrstica[atributi.index('cost.of.labor')]) - float(vrstica[atributi.index('financial.expenses')])
-                #print(float(vrstica[atributi.index('EBIT')] ) / float(vrstica[atributi.index('net.income')]))
-                #print(vrstica[atributi.index('lt.ebit.margin.change')] ," = ", )
-                #print(vrstica[atributi.index('lt.sales.growth')], " = ", (float(vrstica[atributi.index('lt.assets')]) / float(vrstica[atributi.index('lt.liabilities')])))
-                #print(vrstica[atributi.index('net.debt/EBITDA')], " = ", ((float(vrstica[atributi.index('debt')]) + float(vrstica[atributi.index('cash')])   ) / float(vrstica[atributi.index('EBITDA')])))
-                """
-                print(vrstica[atributi.index('TIE')], " = ")
-                a = float(vrstica[atributi.index('EBIT')])
-                b = float(vrstica[atributi.index('interest')])
-                if a == 0 or b == 0:
-                    print("0")
-                else:
-                    if round(a / b, 2) == float(vrstica[atributi.index('ROA')]):
-                        st1 += 1
-                    else:
-                        print(round(a / b, 2))
-
-                #print(vrstica[atributi.index('ROA')])
-                #print(vrstica[atributi.index('net.sales')])
-                #print(vrstica[atributi.index('total.oper.liabilities')] + vrstica[atributi.index('assets')])
-                #print(vrstica[atributi.index('ROA')], " = ", (
-                        #float(vrstica[atributi.index('net.income')]) / (
-                        #float(vrstica[atributi.index('assets')]) + float(vrstica[atributi.index('cash')]) + float(vrstica[atributi.index('inventories')]) + float(vrstica[atributi.index('lt.assets')]) )))
-                print("-----")
-                """
-
+                self.oznake.append(vrstica[34])
         self.points = points
         self.my_clusters = self.clusters
         self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
-        self.abh.linkage = "WARD"         #other possibilities: AVERAGE , WARD
         self.abh.dim = 25
-        self.abh.distance_type = "COSINUS"       #other possibilities: EUCLIDIAN , COSINUS
+        self.abh.l = CT(LOG_NAME, RUN_SET)
+        self.log(self.abh.l.dataset(self.abh))
+        self.cikel_nbr += 1
+        self.data_filename="BONITETE"
+
+    def init_bonitete_pruned(self):
+        """
+        Finding critical examples from the bonitete dataset
+        """
+        input = open('bonitete_avg.tab', 'r')
+        reader = csv.reader(input)
+        atributi = next(reader)
+        atributi = [i.split('\t') for i in atributi]
+        atributi = atributi[0]
+        self.attributes = [atributi[i] for i in range(0,25)]
+        points = []
+        self.clusters = {}
+        self.clustersCopy = {}
+        self.updatedClusters = {}
+        self.data = [d[:] for d in reader]
+        reference = 0
+        self.oznake = []
+
+
+        for i, line in enumerate(self.data):
+            vrstica = line[0].split('\t')
+            self.data[i] = vrstica
+            vektor = []
+            cheat = None
+            for j in range(0, 25):
+                vektor.append(float(vrstica[j]))
+            if vrstica[25] == "A":
+                cheat = "GOOD"
+            else:
+                cheat = "BAD"
+            points.append(Point(vektor, cheat=cheat, reference=int(reference)))
+            cluster = Cluster(reference)
+            cluster.points.append(Point(vektor, cheat=cheat, reference=int(reference)))
+            cluster.primeri.append(reference)
+            self.clusters.update({reference: cluster})
+            self.clusters[reference].centroid = Point(vektor, None, int(reference))
+            self.clustersCopy.update({reference: cluster})
+            self.updatedClusters.update({reference: cluster})
+            reference += 1
+            self.oznake.append(vrstica[25])
+        self.points = points
+        self.my_clusters = self.clusters
+        self.abh = ABHclustering(self.points, points, self.clusters, self.attributes, candidates=None)
+        self.abh.dim = 25
         self.abh.l = CT(LOG_NAME, RUN_SET)
         self.log(self.abh.l.dataset(self.abh))
         self.cikel_nbr += 1
         self.data_filename="BONITETE"
 
 
+
+    def generate_link(self, link_limit, tip):
+        if self.data_filename == "IRIS":
+            position = 4
+        else:
+            position = 25
+        link = []
+
+        while True:
+            pair = (randint(0, len(self.points) - 1), randint(0, len(self.points) - 1))
+            if tip == "CL":
+                if pair[0] != pair[1] and pair not in link:
+                    if self.data[pair[0]][position] != self.data[pair[1]][position]:
+                        link.append(pair)
+            elif tip == "ML":
+                if pair[0] != pair[1] and pair not in link:
+                    if self.data[pair[0]][position] == self.data[pair[1]][position]:
+                        link.append(pair)
+            if len(link) >= link_limit:
+                return link
+
+    def create_random_constraints(self, N):
+        N_CL = randint(0, N - 1)
+        N_ML = N - N_CL
+        cannot_link = self.generate_link(N_CL, "CL")
+        must_link = self.generate_link(N_ML, "ML")
+        return cannot_link, must_link
+    def CA(self):
+        import xlsxwriter
+
+        if self.data_filename == "IRIS":
+            self.final_n_of_clusters = 3
+        else:
+            self.final_n_of_clusters = 2
+        self.abh.distance_type = self.distance_type.get()
+        self.abh.linkage = self.linkage_type.get()
+
+        workbook = xlsxwriter.Workbook('Rezultati_Bonitete_CA_30runs.xlsx')
+        worksheet = workbook.add_worksheet()
+        Rezultati = []
+        Rezultati.append(['stevilo omejitev', 'avg_ARI', 'avg_NMI'])
+        row = 0
+        col = 0
+
+        n_constraints = [3,6,9,12,15,18,21,24,27,30]
+        test_runs = 30
+        for con in n_constraints:
+            ARI = []
+            NMI = []
+            for i in range(0, test_runs):
+                CL, ML = self.create_random_constraints(con)
+                constraints = []
+                for a,b in ML:
+                    omejitev = {}
+                    omejitev['point'] = (self.points[a],2)
+                    omejitev['must-link'] = (self.points[b],0)
+                    constraints.append(omejitev)
+                for a,b in CL:
+                    omejitev = {}
+                    omejitev['point'] = (self.points[a],1)
+                    omejitev['cannot-link'] = (self.points[b],0)
+                    constraints.append(omejitev)
+                self.abh.constraints = constraints
+                self.abh.clusters = self.abh.CAclustering(self.abh.constraints, self.final_n_of_clusters, self.clusters.copy())
+                self.abh.purity()
+                ARI.append(self.abh.ARI)
+                NMI.append(self.abh.NMI)
+
+
+            avg_ARI = sum(ARI)/len(ARI)
+            avg_NMI = sum(NMI)/len(NMI)
+            Rezultati.append([con, avg_ARI, avg_NMI])
+        for i,a,n in (Rezultati):
+            worksheet.write(row,col,i)
+            worksheet.write(row,col+1,a)
+            worksheet.write(row,col+2,n)
+            row += 1
+        workbook.close()
+        exit()
 
     def hierarhicalClustering(self):
         if self.step < 1:
@@ -304,6 +432,8 @@ class App:
             self.constraint_count) + "\n")
         self.master.config(cursor="wait")
         self.master.update()
+        self.abh.distance_type = self.distance_type.get()
+        self.abh.linkage = self.linkage_type.get()
         self.abh.clusters = self.abh.hierarhicalClustering(self.clusters)
         self.master.config(cursor="")
         self.hc_button.destroy()
@@ -347,13 +477,16 @@ class App:
         plt.title('Hierarchical Clustering Dendrogram (truncated)')
         plt.xlabel('sample index or (cluster size)')
         plt.ylabel('distance')
+        #labeli = [str(i)+" "+str(self.oznake[i]) for i in range(0, len(self.abh.Z)+1)]
+        labeli = [str(self.oznake[i]) for i in range(0, len(self.abh.Z) + 1)]
+        Z = np.double(self.abh.Z)
         dendrogram(
-            self.abh.Z,
-            truncate_mode='lastp',  # show only the last p merged clusters
-            p=12,  # show only the last p merged clusters
-            leaf_rotation=90.,
-            leaf_font_size=12.,
-            show_contracted=True,  # to get a distribution impression in truncated branches
+            Z,
+            distance_sort='descending',
+            leaf_font_size=8.,
+            labels=labeli,
+            orientation='left',
+            show_leaf_counts=True
         )
         plt.show(block=True)
         self.plot_button.destroy()
@@ -609,8 +742,8 @@ class App:
             #self.log("Cluster " + str(self.abh.clusters[cluster].name) + ":  distance: " + str(critical_point.getDistance(self.abh.clusters[cluster].centroid)) + "\n")
 
         # We present the example to the expert
-
         #self.log("Critical Example is in cluster: " + self.abh.clusters[self.abh.critical_example[-1][1]].name + "\n")
+        #self.log("Reprezentative example is in cluster: ")
         self.get_argument_with_pair_popup()
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
@@ -776,7 +909,7 @@ class App:
     def number_of_clusters_popup(self):
         top = self.top = Toplevel(self.master)
 
-        label = Label(top, text="Vpisi stevilo clustrov : ", font="Helvetica 16 bold italic")
+        label = Label(top, text="Final number of clusters : ", font="Helvetica 16 bold italic")
         label.pack(side=LEFT)
         self.e = Entry(top)
         self.e.pack(side=LEFT)
@@ -796,7 +929,6 @@ class App:
         #self.log(text)
         text += self.abh.l.candidates(self.abh, self.abh.candidates[start:end], start, end)
         #self.log(text)
-
         top = self.top = Toplevel(self.master)
 
         output_field = Text(top, height=30, width=150)
@@ -841,9 +973,10 @@ class App:
         """
         critical_point = self.abh.critical_example[-1]
         critical_point_target = self.abh.critical_example[-1][1]
-
         self.counter = self.abh.get_pair(critical_point_target)
-        # print("counter: ", self.counter)
+        print(critical_point, critical_point[0].cheat)
+        print(self.counter, self.counter[0].cheat)
+
         print_list = [critical_point, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
         # Ask if data is correct
         self.m = critical_point
@@ -999,6 +1132,8 @@ class App:
                     point.coords.append(round(point.coords[idAtr1] * point.coords[idAtr2], 2))
                 elif operand == '+':
                     point.coords.append(round(point.coords[idAtr1] + point.coords[idAtr2], 2))
+                elif operand == '-':
+                    point.coords.append(round(point.coords[idAtr1] - point.coords[idAtr2], 2))
                 point.n = point.n + 1
             self.abh.clusters[cluster].dim = self.abh.clusters[cluster].dim + 1
             self.abh.clusters[cluster].centroid = self.abh.clusters[cluster].calculateCentroid()
@@ -1201,6 +1336,8 @@ class App:
 
         self.master.config(cursor="wait")
         self.master.update()
+        self.abh.distance_type = self.distance_type.get()
+        self.abh.linkage = self.linkage_type.get()
         self.abh.clusters = self.abh.ABHclustering(self.abh.constraints, self.final_n_of_clusters, clusters)
         self.master.config(cursor="")
         new_keys = []
@@ -1386,6 +1523,8 @@ class App:
         for i,c in enumerate(self.abh.clusters):
             if self.abh[c].name == name:
                 return i
+
+
     def bot(self):
         n_clusters = 3
         for t in TEST_CONST:

@@ -191,30 +191,32 @@ class CT:
 
         table2=[]
         add_spaces = ""
-        if len("Attribute") < max_string_len:
-            add_spaces = " " * (max_string_len - len("Attribute")-2)
-        h2= ["Attribute"+add_spaces]
+        if len("Helper") < max_string_len:
+            add_spaces = " " * (max_string_len - len("Helper")-2)
+        h2= ["Helper"+add_spaces]
+
         for i in range(0,len(points)):
             #log(str(i)+" Example "+str(points[i].reference)+" ".rjust(5), "")
             if isinstance(points[i], tuple):
-                label = " (Example "+str(points[i][0].reference)+")"
+                label = " ("+str(points[i][0].cheat)+")"
                 add_sp = ""
                 if len(label) < size[i]:
                     add_sp = " " * (size[i]-len(label)-2)
                 h2.append(label+add_sp)
             else:
                 try:
-                    label = " ("+str(points[i].name)+")"
+                    label = " ("+str(points[i].cheat)+")"
                     add_sp = ""
                     if len(label) < size[i]:
                         add_sp = " " * (size[i] - len(label)-2)
                     h2.append(label+add_sp)
                 except:
-                    label = " (Example "+str(points[i].reference)+")"
+                    label = " ("+str(points[i].cheat)+")"
                     add_sp = ""
                     if len(label) < size[i]:
                         add_sp = " " * (size[i] - len(label)-2)
                     h2.append(label+add_sp)
+
         #WE ADD THE POINTS CURRENT CLUSTER
         row = ["CLUSTER"]
         for inx, p in enumerate(points):
