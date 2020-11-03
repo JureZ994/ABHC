@@ -138,8 +138,27 @@ class CT:
             max_string_len = len("Silhuette")
         if len("Attribute") > max_string_len:
             max_string_len = len("Attribute")
+
         # WE ADD THE POINTS ATTRIBUTES
         table = [['Index']+list(range(start,end))]
+        master_table = [['Index']+list(range(start,end))]
+
+        #WE ADD THE POINTS SILHUETTE VALUE
+        name = "Silhuette"
+        vrstica = [name]
+        for inx, p in enumerate(points):
+            if isinstance(p, tuple) and p[0].silhuette:
+                vrstica.append(str(round(p[0].silhuette,2)))
+            else:
+                if p.silhuette is None:
+                    vrstica.append("0")
+                else:
+                    vrstica.append(str(round(p.silhuette, 2)))
+
+        table.append(vrstica)
+        master_table.append(vrstica)
+
+
         size = [0 for a in range(0, len(points))]
         for i,label in enumerate(abk.attributes):
             row = []
@@ -150,7 +169,6 @@ class CT:
             #log(label+"", "")
             fp=points[0]
 
-
             for inx ,p in enumerate(points):
                 if isinstance(p, tuple) :
                     if len(p[0].coords) <= i:
@@ -158,7 +176,8 @@ class CT:
                         atr_dif = "NAN"
                         row.append(pr+" ("+atr_dif+")")
                         continue
-                    pr = str(round(p[0].coords[i] , 2))
+                    pr = str(round(p[0].coords[i] , 2))   #tole
+                    out = p[0].coords[i]
                     if isinstance(fp, tuple):
                         atr_dif = str(round(p[0].coords[i]-fp[0].coords[i], 2))
                     else:
@@ -170,7 +189,8 @@ class CT:
                             atr_dif = "NAN"
                             row.append(pr+" ("+atr_dif+")")
                             continue
-                        pr = str(p.coords[i])
+                        pr = str(p.coords[i])    #tole
+                        out = p.coords[i]
                         if isinstance(fp, tuple):
                             atr_dif = str(round(p.coords[i]-fp[0].coords[i], 2))
                         else:
@@ -182,19 +202,36 @@ class CT:
                             row.append(pr+" ("+atr_dif+")")
                             continue
                         pr = str(round(p.coords[i], 2))
+                        out = p.coords[i]
                         atr_dif = str(round(p.coords[i]-fp.coords[i], 2))
-                line = pr+" ("+atr_dif+")"
+                #line = pr+" ("+atr_dif+")"
+                line = '{:,.2f}'.format(out)
+
                 if len(line) > size[inx]:
                     size[inx] = len(line)
                 row.append(line)
+
+            master_table.append(row)
             table.append(row)
+        insert_ = []
+        celica=""
+        for i in range(0,max_string_len):
+            celica+="-"
+        insert_.append(celica)
+        for a in size:
+            celica = ""
+            for i in range(0, a):
+                celica += "-"
+            insert_.append(celica)
+
+        master_table.append(insert_)
 
         table2=[]
         add_spaces = ""
         if len("Helper") < max_string_len:
             add_spaces = " " * (max_string_len - len("Helper")-2)
         h2= ["Helper"+add_spaces]
-
+        pomoc = ["Helper"]
         for i in range(0,len(points)):
             #log(str(i)+" Example "+str(points[i].reference)+" ".rjust(5), "")
             if isinstance(points[i], tuple):
@@ -203,6 +240,7 @@ class CT:
                 if len(label) < size[i]:
                     add_sp = " " * (size[i]-len(label)-2)
                 h2.append(label+add_sp)
+                pomoc.append(label)
             else:
                 try:
                     label = " ("+str(points[i].cheat)+")"
@@ -210,13 +248,12 @@ class CT:
                     if len(label) < size[i]:
                         add_sp = " " * (size[i] - len(label)-2)
                     h2.append(label+add_sp)
+                    pomoc.append(label)
                 except:
                     label = " ("+str(points[i].cheat)+")"
-                    add_sp = ""
-                    if len(label) < size[i]:
-                        add_sp = " " * (size[i] - len(label)-2)
-                    h2.append(label+add_sp)
-
+                    pomoc.append(label)
+        master_table.append(pomoc)
+        #table.append(h2)
         #WE ADD THE POINTS CURRENT CLUSTER
         row = ["CLUSTER"]
         for inx, p in enumerate(points):
@@ -232,23 +269,7 @@ class CT:
                     pr = 'is a cluster'
             row.append(pr)
         table2.append(row)
-        #WE ADD THE POINTS SILHUETTE VALUE
-        name = "Silhuette"
-        if len(name) < max_string_len:
-            add_spaces = " " * (max_string_len - len(name))
-        row = [name + add_spaces]
-        for inx, p in enumerate(points):
-
-            if isinstance(p, tuple) and p[0].silhuette:
-                row.append(str(round(p[0].silhuette,2)))
-            else:
-                if p.silhuette is None:
-                    row.append("0")
-                else:
-                    row.append(str(round(p.silhuette, 2)))
-
-        table2.append(row)
-
+        master_table.append(row)
 
         for i, cluster in enumerate(abk.clusters):
             add_spaces=""
@@ -258,16 +279,19 @@ class CT:
             row = [name+add_spaces]
             for inx, p in enumerate(points):
                 if isinstance(p, tuple) and p[0].distances and len(p[0].distances) > i:
-                    row.append(round(p[0].getDistance(abk.clusters[cluster].centroid),2))
+                    out = round(p[0].getDistance(abk.clusters[cluster].centroid),2)
                 elif isinstance(p, tuple):
-                    row.append(round(p[0].getDistance(abk.clusters[cluster].centroid),2))
+                    out = round(p[0].getDistance(abk.clusters[cluster].centroid),2)
                 elif isinstance(p, Point):
-                    row.append(round(p.getDistance(abk.clusters[cluster].centroid),2))
+                    out = round(p.getDistance(abk.clusters[cluster].centroid),2)
                 else:
-                    row.append(round(p.centroid.getDistance(abk.clusters[cluster].centroid),2))
+                    out = round(p.centroid.getDistance(abk.clusters[cluster].centroid),2)
+                row.append('{:,.2f}'.format(out))
             table2.append(row)
-        o += tabulate(table, headers=h)+"\n"
-        o += tabulate(table2, headers=h2)+"\n"
+            master_table.append(row)
+
+        o += tabulate(master_table, headers=h, tablefmt="psql", stralign='right')+"\n"
+        #o += tabulate(table2, headers=h2)+"\n"
         f1=open(self.file, 'a')
         f1.write(o+"\n")
         f1.close()

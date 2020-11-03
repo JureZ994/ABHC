@@ -22,84 +22,80 @@ class App:
     def __init__(self, master):
         self.master = master
         self.helper = None
+        self.helper_index = None
+        self.helper_type = None
         self.constraint_count = 0
         self.attributes = []
-        menu_frame = Frame()
-        menu_frame.pack(fill=X, side=TOP)
-        self.menu_frame = menu_frame
         self.step = 0
+
+        master.geometry("{0}x{1}+0+0".format(
+            master.winfo_screenwidth()-100, master.winfo_screenheight()-100))
 
         self.autorun = None
         #elf.autorun = Button(menu_frame, text="Autorun", command=self.bot2)
         #self.autorun.pack(side=LEFT)
+
+        menu_frame = Frame()
+        menu_frame.pack(fill=X, side=TOP)
+        self.menu_frame = menu_frame
+
+        levi_frame = Frame()
+        levi_frame.pack(side=LEFT, anchor=W, fill=Y)
+        self.levi_frame = levi_frame
+
         frame = Frame()
-        frame.pack(expand=1, fill='both', side=RIGHT)
+        frame.pack(fill='both', side=LEFT, anchor=E, expand=1)
         self.frame = frame
 
-        distance_frame = Frame()
-        distance_frame.pack(expand=1, fill=X, side=TOP, anchor=NW)
-        self.distance_frame = distance_frame
+        constraints_frame = Frame()
+        self.constraint_frame = constraints_frame
+        self.constraint_frame.pack(fill=Y, side=RIGHT, anchor=E)
 
         self.info_distance = StringVar()
         self.info_distance.set("Distance between cases:\n")
-        Label(self.distance_frame, textvariable=self.info_distance, font="Helvetica 12 bold", justify=LEFT)\
-            .pack(side=TOP, anchor=NW)
+        Label(self.levi_frame, textvariable=self.info_distance, font="Helvetica 12 bold", justify=LEFT)\
+            .pack(side=TOP, anchor=W)
 
         self.distance_type = StringVar()
         self.distance_choice = ['Cosine', 'Euclidean']
         self.distance_type.set(self.distance_choice[0])  # default value
-        self.distance_menu = OptionMenu(self.distance_frame, self.distance_type, *self.distance_choice)\
-            .pack(side=TOP, anchor=N)
+        self.distance_menu = OptionMenu(self.levi_frame, self.distance_type, *self.distance_choice)\
+            .pack(side=TOP, anchor=CENTER)
 
         self.info_linkage = StringVar()
         self.info_linkage.set("\nLinkage type:\n")
-        Label(self.distance_frame, textvariable=self.info_linkage, font="Helvetica 12 bold", justify=LEFT)\
-            .pack(side=TOP, anchor=NW)
+        Label(self.levi_frame, textvariable=self.info_linkage, font="Helvetica 12 bold", justify=LEFT)\
+            .pack(side=TOP, anchor=W)
 
         self.linkage_type = StringVar()
         self.linkage_choice = ['Average', 'Ward']
         self.linkage_type.set(self.linkage_choice[0])  # default value
-        self.distance_menu = OptionMenu(self.distance_frame, self.linkage_type, *self.linkage_choice)\
-            .pack(side=TOP, anchor=N)
-
-
-
-        cikel_frame = Frame()
-        cikel_frame.pack(expand=1, fill=X, side=TOP, anchor=NW)
-        self.cikel_frame = cikel_frame
-
-        info_frame = Frame()
-        info_frame.pack(expand=1, fill=X, side=TOP)
-        self.info_frame = info_frame
+        self.distance_menu = OptionMenu(self.levi_frame, self.linkage_type, *self.linkage_choice)\
+            .pack(side=TOP)
 
         self.cikel_label = StringVar()
-        Label(self.cikel_frame, textvariable=self.cikel_label, justify=LEFT).pack(side=TOP, anchor=NW)
+        Label(self.levi_frame, textvariable=self.cikel_label, justify=LEFT).pack(side=TOP)
 
         self.info_label = StringVar()
         self.info_label.set("Clusters found:\n")
-        Label(self.info_frame, textvariable=self.info_label, font="Helvetica 14 bold italic", justify=LEFT).pack(side=TOP, anchor=SW)
+        Label(self.levi_frame, textvariable=self.info_label, font="Helvetica 14 bold italic", justify=LEFT).pack(side=TOP,anchor=W, pady=20)
 
-        #self.listbox = Listbox(self.info_frame, width="50")
-        #self.listbox.pack(side=BOTTOM, anchor=SW)
-
-        #self.details_label = StringVar()
-        #self.details_label.set("")
-        #Label(self.info_frame, textvariable=self.details_label, justify=LEFT).pack(side=BOTTOM, anchor=SW)
-
-        # self.output_field = Text(master, height=10, width=80)
-        # self.output_field.pack(side=LEFT, fill=BOTH, expand=1)
-
-        self.cluster_output = Text(frame, height=1)
-        self.cluster_output.pack(side=LEFT, fill='both', expand=1, anchor=W)
+        self.cluster_output = Text(self.frame)
+        self.cluster_output.pack(side=LEFT, fill='both', expand=1)
         self.cluster_output_scroll = Scrollbar(frame)
         self.cluster_output_scroll.pack(side=RIGHT, fill=Y)
         self.cluster_output_scroll.config(command=self.cluster_output.yview)
         self.cluster_output.config(yscrollcommand=self.cluster_output_scroll.set)
         self.cluster_output.bind('<<Modified>>', self.showEnd)
-        # self.output_field.bind('<<Modified>>',self.showEndOutput)
 
-        master.geometry("{0}x{1}+0+0".format(
-            master.winfo_screenwidth()-100, master.winfo_screenheight()-100))
+
+        napis = StringVar()
+        napis.set("Constraints made:\n")
+        Label(self.constraint_frame, textvariable=napis, font="Helvetica 14 bold italic", justify=LEFT).pack(side=TOP, anchor=W)
+        scrollbar = Scrollbar(self.constraint_frame)
+        scrollbar.pack(side=RIGHT, fill=Y)
+
+
         self.final_n_of_clusters = None
         self.my_clusters = None
         self.n_clusters_index_start = 0
@@ -134,6 +130,7 @@ class App:
         self.next_button = None
         self.plot_clusters_button = None
         self.labels = []
+        self.constraints = []
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
@@ -150,6 +147,10 @@ class App:
                                                                     "-----------------------------------------\n"
                                                                     "Run ABHC:")
 
+    def remove_constraint(self, constraint):
+        for a in range(0,10):
+            print(a)
+        exit()
     def set_labels(self):
         self.listbox.delete(0, END)
         self.map_point_name_to_point = {}
@@ -299,7 +300,7 @@ class App:
         """
         Finding critical examples from the bonitete dataset
         """
-        input = open('bonitete_avg.tab', 'r')
+        input = open('bonitete_subset.tab', 'r')
         reader = csv.reader(input)
         atributi = next(reader)
         atributi = [i.split('\t') for i in atributi]
@@ -624,8 +625,6 @@ class App:
         pca.fit(scaled_data)
         x_pca = pca.transform(scaled_data)
 
-        #fig = Figure(figsize=(6,6))
-        #a = fig.add_subplot(111)
         counter = 0
         plt.figure()
         plt.xlim([math.ceil(x_pca[:, 0].min() - .5), math.ceil(x_pca[:, 0].max() + .5)])
@@ -635,24 +634,9 @@ class App:
         for i,cluster in enumerate(self.abh.clusters):
             for j in self.abh.clusters[cluster].points:
 
-                #plt.annotate(str(j.reference), xy=j.coords, xytext=(0, 0), color="black")
-                #a.text(x_pca[counter, 0], x_pca[counter, 1], str(j.reference), color='black', fontsize=7)
                 pl.text(x_pca[counter, 0], x_pca[counter, 1], str(j.reference), color='black', fontsize=9)
-                #a.plot(x_pca[counter, 0], x_pca[counter, 1], marker=str(j.reference),color='black')
-                #a.scatter(x_pca[counter][0], x_pca[counter][1], color=color[i])
                 plt.scatter(x_pca[counter, 0], x_pca[counter, 1], marker='o', c=color[i], s=100)
                 counter += 1
-        #a.scatter(v,x,color='red')
-
-        #a.invert_yaxis()
-
-        #a.set_title ("Estimation Grid", fontsize=16)
-        #a.set_ylabel("Second Principal Component", fontsize=14)
-        #a.set_xlabel("First principal component", fontsize=14)
-
-        #canvas = FigureCanvasTkAgg(fig, master=top)
-        #canvas.get_tk_widget().pack()
-        #canvas.draw()
 
         plt.show(block=True)
 
@@ -672,9 +656,6 @@ class App:
                 self.helper = None
         self.refresh_cluster_data()
         self.update_display_data()
-        # name = raw_input("Clusters new name:")
-        # self.l.log('\n')
-        # cluster.name = name
 
     def get_criticals(self):
         self.abh.prev_dict = self.abh.make_dict()
@@ -686,6 +667,7 @@ class App:
         start = self.critical_index_start
         self.pick_critical_popup(self.critical_index_start, self.critical_index_end)
         self.master.wait_window(self.top)
+
         if (self.helper == None and start == self.critical_index_start) or self.helper == 'Choose example index:':
 
             self.log("No example picked.\n")
@@ -696,7 +678,8 @@ class App:
             self.get_criticals()
             return 0
 
-        if self.helper == None:
+        elif self.helper == None and start != self.critical_index_start and start == 5:
+            self.get_criticals()
             return 0
         if self.step < 2:
             self.step = 2
@@ -801,8 +784,7 @@ class App:
 
             #self.log(arg_str)
         # argument collected, allow fetching counter examples and argumenting them
-
-
+        self.update_constraints()
         if self.counter_example_button is None:
             self.counter_example_button = Button(self.menu_frame, text="Argument counter examples",
                                                  command=self.counter_steps)
@@ -826,7 +808,6 @@ class App:
                                                                     "Run ABHC:")
 
     def counter_steps(self):
-        #print(self.abh.condition)
         for condition in self.abh.condition:
             #self.log("Counter examples for critical example: Example " + str(condition["point"][0].reference) + "\n")
 
@@ -856,6 +837,10 @@ class App:
 
                 if self.helper and self.helper['counter']:
                     condition["counter"] = condition["counter"] + self.helper['counter']
+                    #print(condition['point'][0].reference)    #primer
+                    #print(self.helper['counter'][0]['act'])   #tip omejitve
+                    #print(self.helper['counter'][0]['example'][0].reference)  #protiprimer
+                    self.update_constraints()
                 self.helper = None
             if self.step < 4:
                 self.step = 4
@@ -865,6 +850,7 @@ class App:
             self.improve_button.pack(side=LEFT)
         if str(self.improve_button['state']) == 'disabled':
             self.improve_button['state'] = 'normal'
+
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
@@ -884,14 +870,15 @@ class App:
     def rename_popup(self, text, cluster):
         top = self.top = Toplevel(self.master)
 
-        output_field = Text(top, height=30, width=120)
-        output_field.insert(END, text)
-        output_field.pack(fill=BOTH, expand=1)
+        frame = Frame(self.top)
+        frame.pack(fill=X, anchor=W)
 
-        # self.output_field_scroll = Scrollbar(self.master)
-        # self.output_field_scroll.pack(side=RIGHT, fill=Y)
-        # self.output_field_scroll.config(command=self.output_field.yview)
-        # self.output_field.config(yscrollcommand=self.output_field_scroll.set)
+        self.test = StringVar()
+        self.test.set(text)
+
+        self.output_field = Label(top, textvariable=self.test, anchor="nw", justify=LEFT, font="Consolas 11")
+        self.output_field.pack(fill=BOTH, expand=1)
+
         label = Label(top, text="Rename " + cluster + ":", font="Helvetica 16 bold italic")
         label.pack(side=LEFT)
         self.e = Entry(top)
@@ -929,11 +916,18 @@ class App:
         #self.log(text)
         text += self.abh.l.candidates(self.abh, self.abh.candidates[start:end], start, end)
         #self.log(text)
+
         top = self.top = Toplevel(self.master)
 
-        output_field = Text(top, height=30, width=150)
-        output_field.insert(END, text)
-        output_field.pack(fill=BOTH, expand=1)
+        frame = Frame(self.top)
+        frame.pack(fill=X, anchor=W)
+
+        self.test = StringVar()
+        self.test.set(text)
+
+        self.output_field = Label(top, textvariable=self.test, anchor="nw", justify=LEFT, font="Consolas 11")
+        self.output_field.pack(fill=BOTH, expand=1)
+
 
         if len(self.abh.candidates) > 0 and start >= 5:
             self.prev_button = Button(top, text="<<<", command=lambda: self.prev_critical_display(start, end)).pack(
@@ -974,10 +968,9 @@ class App:
         critical_point = self.abh.critical_example[-1]
         critical_point_target = self.abh.critical_example[-1][1]
         self.counter = self.abh.get_pair(critical_point_target)
-        print(critical_point, critical_point[0].cheat)
-        print(self.counter, self.counter[0].cheat)
 
-        print_list = [critical_point, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
+        #print_list = [critical_point, self.counter] + [self.abh.clusters[c].represent() for c in self.abh.clusters]
+        print_list = [critical_point, self.counter]
         # Ask if data is correct
         self.m = critical_point
 
@@ -1155,7 +1148,6 @@ class App:
 
         self.support_frame.destroy()
         self.update_display_data()
-
     def argument_pair_close(self):
         rule_dic = {}
 
@@ -1183,6 +1175,7 @@ class App:
         rule_dic["arguments"] = condition
 
         t = self.counter_act.get().lower()
+        tip = t
         if t == 'nothing':
             t = 0
         elif t == 'cannot-link':
@@ -1193,6 +1186,7 @@ class App:
             t = 0
         counter = [{'act': t, 'example': self.counter}]
         rule_dic['counter'] = counter
+
         #self.log(str(rule_dic))
         # We have our condition. find counter examples
         self.helper = rule_dic
@@ -1201,8 +1195,8 @@ class App:
     def counter_argument_popup(self, condition, counter):
         critical_point = condition["point"][0]
         self.counter = counter
-        print_list = [condition["point"], counter] + [self.abh.clusters[c].represent() for i, c in
-                                                      enumerate(self.abh.clusters)]
+        #print_list = [condition["point"], counter] + [self.abh.clusters[c].represent() for i, c in enumerate(self.abh.clusters)]
+        print_list = [condition["point"], counter]
 
         #self.log("Fetching argument for counter example\n")
 
@@ -1307,26 +1301,29 @@ class App:
         constraints = []
         f = open('constraints_Cikel' + str(self.cikel_nbr) + ".txt", 'w')
         for c in self.abh.condition:
+            #print(c)
             if c['counter'] != None:
                 for counter in c['counter']:
                     constraint = {}
                     if c['point'] != None:
                         constraint['point'] = c['point']
-                    if counter['act'] == 1 and counter['example'] != None:
+                    if counter['act'] == 0 and counter['example'] != None:
+                        constraint['no-link'] = counter['example']
+                    elif counter['act'] == 1 and counter['example'] != None:
                         constraint['cannot-link'] = counter['example']
                     elif counter['act'] == 2 and counter['example'] != None:
                         constraint['must-link'] = counter['example']
                     if constraint not in constraints:
                         constraints.append(constraint)
-                        f.write(str(constraint) + '\n')  # python will convert \n to os.linesep
+                        f.write(str(constraint) + '\n')
                         self.constraint_count += 1
-            f.write("NUMBER OF CONSTRAINTS: " + str(len(constraints)) + '\n')  # python will convert \n to os.linesep
-            f.write("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')  # python will convert \n to os.linesep
+            f.write("NUMBER OF CONSTRAINTS THIS ITERATION: " + str(len(constraints)) + '\n')
+            f.write("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')
         f.close()  # you can omit in most cases as the destructor will call it
+
         #self.log("iter: " + str(self.cikel_nbr) + '\n')
+
         self.log("NUMBER OF ALL CONSTRAINTS: " + str(self.constraint_count) + '\n')
-
-
         self.abh.constraints = self.abh.constraints + constraints
         #self.log(str(self.abh.constraints) + '\n')
         self.log(self.abh.l.conditions(self.abh) + '\n')
@@ -1362,6 +1359,7 @@ class App:
         self.cikel_nbr += 1
         self.refresh_cluster_data()
         self.update_display_data()
+        self.update_constraints()
         self.cikel_label.set("ABHC Cikel: " + str(self.cikel_nbr) + "\n"
                                                                     "-----------------------------------------\n"
                                                                     "Initialization: Finished\n"
@@ -1392,31 +1390,67 @@ class App:
     def log(self, string):
         self.cluster_output.insert(END, string)
         self.abh.l.log(string)
+    def update_constraints(self):
+        if len(self.constraints) > 0:
+            for label in self.constraints:
+                label.destroy()
+        for constraint in self.abh.condition:
+            for i in range(len(constraint['counter'])-1, -1, -1):
+                link = ""
+                if constraint['counter'][i]['act'] == 0:
+                    link = 'no-link'
+                elif constraint['counter'][i]['act'] == 1:
+                    link = 'cannot-link'
+                elif constraint['counter'][i]['act'] == 2:
+                    link = 'must-link'
+                line = str(constraint['point'][0].reference) + " "+ link + " "+ str(constraint['counter'][i]['example'][0].reference)
+                details_label = StringVar()
+                details_label.set(line)
+                l = Label(self.constraint_frame, textvariable=details_label, font="Helvetica 12 bold italic", justify=LEFT,
+                          cursor='hand1')
+                l.pack(side=TOP, anchor=W)
+
+                l.bind("<Button-1>", lambda link, a=i,b="new":self.open_constraint_window(a,b))
+                if link == 'cannot-link':
+                    l.configure(foreground="red")
+                elif link == 'must-link':
+                    l.configure(foreground="green")
+                elif link == 'no-link':
+                    l.configure(foreground="black")
+                self.constraints.append(l)
+        for i,constraint in reversed(list(enumerate(self.abh.constraints))):
+            line=""
+            link=""
+            if len(constraint) > 1:
+                if 'must-link' in constraint.keys():
+                    line = str(constraint['point'][0].reference) + " must-link " + str(
+                        constraint['must-link'][0].reference)
+                    link = "must-link"
+                elif 'cannot-link' in constraint.keys():
+                    line = str(constraint['point'][0].reference) + " cannot-link " + str(
+                        constraint['cannot-link'][0].reference)
+                    link = "cannot-link"
+                elif 'no-link' in constraint.keys():
+                    line = str(constraint['point'][0].reference) + " no-link " + str(
+                        constraint['no-link'][0].reference)
+                    link = "no-link"
+
+                details_label = StringVar()
+                details_label.set(line)
+                l = Label(self.constraint_frame, textvariable=details_label, font="Helvetica 12 bold italic", justify=LEFT,
+                          cursor='hand1')
+                l.pack(side=TOP, anchor=W)
+                l.bind("<Button-1>", lambda link, a=i,b="old":self.open_constraint_window(a,b))
+
+                if link == 'cannot-link':
+                    l.configure(foreground="red")
+                elif link == 'must-link':
+                    l.configure(foreground="green")
+                elif link == 'no-link':
+                    l.configure(foreground="black")
+                self.constraints.append(l)
 
     def update_display_data(self):
-        """
-        Updates display data
-        :return:
-        """
-        """
-        # Show file name
-        o = "===========================\n"
-        o += "===========" + str(self.data_filename) + "============\n"
-        o += "===========================\n"
-        details_label = StringVar()
-        details_label.set(o)
-        Label(self.frame, textvariable=details_label, justify=LEFT).pack(side=TOP, anchor=W)
-
-        # show nmi and ari
-        o = ""
-        if self.abh.NMI is not None and self.abh.ARI is not None:
-            o += "NMI: " + str(self.abh.NMI) + "\nARI: " + str(self.abh.ARI) + "\n"
-            self.log(o)
-        details_label = StringVar()
-        details_label.set(o)
-        Label(self.frame, textvariable=details_label, justify=LEFT).pack(side=TOP, anchor=W)
-        """
-        # show cluster centroids
         if len(self.labels) > 0:
             for label in self.labels:
                 label.destroy()
@@ -1429,7 +1463,7 @@ class App:
             self.abh.clusters[cluster].points.sort(key=lambda x: int(x.reference), reverse=False)
             details_label = StringVar()
             details_label.set(o)
-            l = Label(self.info_frame, textvariable=details_label, font="Helvetica 10 bold italic", justify=LEFT, cursor='hand1')
+            l = Label(self.levi_frame, textvariable=details_label, font="Helvetica 10 bold italic", justify=LEFT, cursor='hand1')
             l.pack(side=TOP, anchor=W)
             # On centroid click, open window with points
             l.bind("<Button-1>", lambda e, cluster=cluster: self.open_cluster_window(cluster))
@@ -1470,6 +1504,63 @@ class App:
         self.cluster_listbox.select_set(0) #This only sets focus on the first item.
         self.cluster_listbox.event_generate("<<ListboxSelect>>")
 
+    def open_constraint_window(self, i, trenutna):
+        if hasattr(self, 'top'):
+            self.top.destroy()
+        top = self.top = Toplevel(self.master)
+        self.top.point_frame = None
+        f = self.top.list_frame = Frame(self.top)
+        f.pack(expand=1, fill='both', side=LEFT, anchor=NW)
+        self.helper_index=i
+        self.helper_type=trenutna
+        self.glavni = StringVar()
+
+        self.lev = StringVar()
+        self.napis = StringVar()
+        self.optionMenu = StringVar()
+        self.izbira = ["no-link", "cannot-link", "must-link"]
+        self.napis.set("Change the following constraint:")
+        if trenutna=="new":
+            print_list = [self.abh.condition[0]['point'][0], self.abh.condition[0]['counter'][i]['example'][0]]
+            self.optionMenu.set(self.izbira[self.abh.condition[0]['counter'][i]['act']])
+        if trenutna=="old":
+            kljuc = list(self.abh.constraints[i].keys())[1]
+            print_list = [self.abh.constraints[i]['point'][0],self.abh.constraints[i][kljuc][0]]
+            act=0
+            if kljuc == 'cannot-link':
+                act = 1
+            elif kljuc == 'must-link':
+                act = 2
+            self.optionMenu.set(self.izbira[act])
+
+        text = self.abh.l.candidates(self.abh, print_list, 0, len(print_list))
+        self.lev.set(text)
+        self.gor = Label(top, textvariable=self.napis, justify=LEFT, font="Consolas 15").pack(side=TOP,anchor=N)
+        self.levi = Label(top, textvariable=self.lev, font="Consolas 11").pack(side=TOP)
+        w3 = OptionMenu(top, self.optionMenu, *self.izbira).pack()
+        b = Button(top, text="OK", command=self.constraint_close).pack(side=BOTTOM)
+
+    def constraint_close(self):
+        omejitev = self.optionMenu.get()
+        act = None
+        if omejitev == "no-link":
+            act=0
+        elif omejitev == "cannot-link":
+            act=1
+        elif omejitev == "must-link":
+            act=2
+        if self.helper_type == "new":
+            self.abh.condition[0]['counter'][self.helper_index]['act'] = act
+        elif self.helper_type == "old":
+            kljuc = list(self.abh.constraints[self.helper_index])[1]
+            self.abh.constraints[self.helper_index][omejitev] = self.abh.constraints[self.helper_index].pop(kljuc)
+
+        self.helper_index=None
+        self.helper_type=None
+        self.update_constraints()
+        self.top.destroy()
+
+
     def display_point_data(self, e, cluster):
         index = int(self.cluster_listbox.curselection()[0])
                 # Frame with cikel info
@@ -1482,7 +1573,6 @@ class App:
 
         if index == 0:
             o=self.abh.clusters[cluster].printStats(self.abh)
-            print(o)
             #self.log(o)
             self.top.point_label.set(o)
         else:
@@ -1757,7 +1847,6 @@ class App:
 
                 f.write(o)  # python will convert \n to os.linesep
                 f.close()  # you can omit in most cases as the destructor will call it
-
 
 
 root = Tk()
